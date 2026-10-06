@@ -220,21 +220,53 @@ export function BoardSetupView({
     setErrorMessage(null);
 
     try {
-      // Fire socket event for instant real-time broadcast
-      submitBoardSocket(room.roomCode, currentPlayer.id, cells as number[]).catch(() => {});
+      let submissionSuccess = false;
+      let updatedRoom: Room | null = null;
 
-      const response = await roomService.submitBoard(
-        room.roomCode,
-        currentPlayer.id,
-        cells as number[]
-      );
+      // 1. If socket is connected, try fast socket submission with server acknowledgment
+      const socket = getSocket();
+      if (socket && socket.connected) {
+        try {
+          const socketRes = await submitBoardSocket(
+            room.roomCode,
+            currentPlayer.id,
+            cells as number[]
+          );
+          if (socketRes && socketRes.success) {
+            submissionSuccess = true;
+            if (socketRes.room) {
+              updatedRoom = mapBackendRoomToClient(socketRes.room as any);
+            }
+          }
+        } catch {
+          // Socket timed out or error; fall through to REST fallback
+        }
+      }
 
-      if (response.success && response.data) {
+      // 2. If socket didn't complete, submit via authoritative REST endpoint
+      if (!submissionSuccess) {
+        const response = await roomService.submitBoard(
+          room.roomCode,
+          currentPlayer.id,
+          cells as number[]
+        );
+
+        if (response.success && response.data) {
+          submissionSuccess = true;
+          updatedRoom = response.data.room;
+        } else {
+          setErrorMessage(response.message || 'Failed to submit board.');
+          return;
+        }
+      }
+
+      if (submissionSuccess) {
         setIsSubmitted(true);
-        setRoom(response.data.room);
-        onRoomUpdate?.(response.data.room);
-      } else {
-        setErrorMessage(response.message || 'Failed to submit board.');
+        setErrorMessage(null);
+        if (updatedRoom) {
+          setRoom(updatedRoom);
+          onRoomUpdate?.(updatedRoom);
+        }
       }
     } catch {
       setErrorMessage('Network error while submitting board.');
@@ -352,7 +384,7 @@ export function BoardSetupView({
           )}
 
           {/* Error Banner */}
-          {errorMessage && (
+          {!isSubmitted && errorMessage && (
             <div className="w-full max-w-md p-3.5 rounded-xl bg-rose-500/20 border border-rose-400 text-xs text-rose-300 flex items-center gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
               <span>{errorMessage}</span>

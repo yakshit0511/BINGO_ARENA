@@ -131,7 +131,7 @@ export function formatPublicGameState(game?: IGameState): PublicGameState {
 
   return {
     status: game.status || 'waiting',
-    startedAt: game.startedAt ? game.startedAt.toISOString() : null,
+    startedAt: game.startedAt ? (game.startedAt instanceof Date ? game.startedAt.toISOString() : String(game.startedAt)) : null,
     endedAt: game.endedAt ? (game.endedAt instanceof Date ? game.endedAt.toISOString() : String(game.endedAt)) : null,
     roundNumber: game.roundNumber || 1,
     roundHistory: Array.isArray(game.roundHistory) ? game.roundHistory.map(formatRound) : [],
@@ -185,7 +185,7 @@ export function formatPublicRoom(
     isHost: p.isHost,
     isConnected: p.isConnected,
     hasSubmitted: p.hasSubmitted,
-    joinedAt: p.joinedAt ? p.joinedAt.toISOString() : new Date().toISOString(),
+    joinedAt: p.joinedAt ? (p.joinedAt instanceof Date ? p.joinedAt.toISOString() : String(p.joinedAt)) : new Date().toISOString(),
     completedLines: p.completedLines || [],
     earnedLetters: p.earnedLetters || [],
     completedLineCount: p.completedLineCount || 0,
@@ -214,7 +214,7 @@ export function formatPublicRoom(
       name: hostName,
     },
     players: publicPlayers,
-    createdAt: room.createdAt ? room.createdAt.toISOString() : new Date().toISOString(),
+    createdAt: room.createdAt ? (room.createdAt instanceof Date ? room.createdAt.toISOString() : String(room.createdAt)) : new Date().toISOString(),
   };
 }
 
@@ -562,12 +562,22 @@ export const roomService = {
       return { success: false, statusCode: 404, message: 'Player not found in this room.' };
     }
 
-    // 3. Check if already submitted (Board locking & Anti-cheating)
+    // 3. Check if already submitted (Idempotent handling for fast retries / parallel requests)
     if (player.hasSubmitted) {
+      const players = await PlayerModel.find({
+        roomCode: cleanCode,
+        playerId: { $in: room.players },
+      }).sort({ joinedAt: 1 });
+      const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
+      const publicRoom = formatPublicRoom(room, players, hostPlayer);
       return {
-        success: false,
-        statusCode: 409,
-        message: 'Board has already been submitted and locked.',
+        success: true,
+        statusCode: 200,
+        message: 'Board already submitted and locked.',
+        data: {
+          room: publicRoom,
+          board: (player.board && player.board.length > 0) ? player.board : (Array.isArray(cells) ? cells as number[] : []),
+        },
       };
     }
 
@@ -583,11 +593,18 @@ export const roomService = {
 
     const validCells = cells as number[];
 
-    // 5. Save board and lock player
-    player.board = validCells;
-    player.hasSubmitted = true;
-    player.submittedAt = new Date();
-    await player.save();
+    // 5. Save board and lock player atomically (prevents Mongoose VersionError on concurrent requests)
+    const updatedPlayer = await PlayerModel.findOneAndUpdate(
+      { roomCode: cleanCode, playerId, hasSubmitted: { $ne: true } },
+      {
+        $set: {
+          board: validCells,
+          hasSubmitted: true,
+          submittedAt: new Date(),
+        },
+      },
+      { new: true }
+    );
 
     // 6. Fetch all players in room
     const players = await PlayerModel.find({
@@ -598,12 +615,19 @@ export const roomService = {
     // 7. Check if all players submitted
     const allSubmitted = players.length > 0 && players.every((p) => p.hasSubmitted);
     if (allSubmitted && room.status === 'waiting') {
+      await RoomModel.updateOne(
+        { roomCode: cleanCode, status: 'waiting' },
+        { $set: { status: 'ready' } }
+      );
       room.status = 'ready';
-      await room.save();
     }
 
     const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
     const publicRoom = formatPublicRoom(room, players, hostPlayer);
+
+    const savedBoard = (updatedPlayer && updatedPlayer.board && updatedPlayer.board.length > 0)
+      ? updatedPlayer.board
+      : validCells;
 
     return {
       success: true,
@@ -611,7 +635,7 @@ export const roomService = {
       message: 'Board submitted and locked successfully.',
       data: {
         room: publicRoom,
-        board: validCells,
+        board: savedBoard,
       },
     };
   },
