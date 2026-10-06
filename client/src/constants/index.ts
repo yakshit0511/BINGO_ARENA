@@ -32,7 +32,7 @@ export const CALLING_MODES: {
 // Helpful word inspirations by grid length
 export const WORD_SUGGESTIONS_BY_SIZE: Record<number, string[]> = {
   5: ['BINGO', 'ARENA', 'CHAMP', 'LUCKY', 'TITAN'],
-  6: ['YAKSHI', 'VICTOR', 'MASTER', 'LEGEND', 'STRIKE'],
+  6: ['ARCADE', 'VICTOR', 'MASTER', 'LEGEND', 'STRIKE'],
   7: ['KRISHNA', 'WARRIOR', 'SUPREME', 'CONQUER', 'PHOENIX'],
   8: ['CHAMPION', 'TRIUMPHS', 'VALIANT', 'ULTIMATE', 'INFINITY'],
   9: ['GLADIATOR', 'VICTORIOUS', 'LIGHTNING', 'DOMINATOR', 'CHAMPIONS'],
@@ -52,7 +52,9 @@ export const WORD_SUGGESTIONS_BY_SIZE: Record<number, string[]> = {
 const rawApiUrl =
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_API_URL ||
-  'http://localhost:5001';
+  (import.meta.env.PROD
+    ? 'https://bingo-arena-92ne.onrender.com'
+    : 'http://localhost:5001');
 
 export const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
 

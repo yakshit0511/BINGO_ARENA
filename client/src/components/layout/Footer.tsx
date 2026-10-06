@@ -27,7 +27,7 @@ export function Footer() {
           </div>
 
           <div className="text-slate-500 text-center md:text-right">
-            Stage 2 Visual & 3D System • Ready for Stage 3 Game Loop
+            Real-Time Multiplayer Arcade • Live Production
           </div>
         </div>
       </div>

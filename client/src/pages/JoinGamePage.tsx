@@ -19,7 +19,7 @@ export function JoinGamePage() {
   const [searchParams] = useSearchParams();
 
   // Form State
-  const [playerName, setPlayerName] = useState('Yakshit');
+  const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -181,7 +181,7 @@ export function JoinGamePage() {
               type="text"
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
-              placeholder="e.g. Yakshit"
+              placeholder="Enter your nickname (2-20 characters)"
               maxLength={20}
               className="w-full px-4 py-3 rounded-xl bg-arcade-bg border border-arcade-border text-white text-sm focus:outline-none focus:border-arcade-purple focus:ring-1 focus:ring-arcade-purple transition"
             />
@@ -217,7 +217,7 @@ export function JoinGamePage() {
             <Link to="/create" className="text-fuchsia-300 font-bold hover:underline">
               Create a new room
             </Link>{' '}
-            or enter <code className="text-arcade-gold bg-arcade-bg px-1 py-0.5 rounded font-mono">B7K4P2</code> for instant demo.
+            to get started.
           </p>
         </div>
       </TiltCard>

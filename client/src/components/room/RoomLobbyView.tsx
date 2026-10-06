@@ -198,15 +198,51 @@ export function RoomLobbyView({
     setIsStarting(true);
     setStartError(null);
     try {
+      // 1. Attempt via Socket.IO
       const res = await startGameSocket(room.roomCode, currentPlayer.id, configuredTurnOrder);
+
+      // 2. If socket was not acknowledged or failed, fallback to REST API
+      if (!res.success) {
+        console.warn('Socket startGame not acknowledged, trying REST API...', res.message);
+        const restRes = await roomService.startGame(
+          room.roomCode,
+          currentPlayer.id,
+          configuredTurnOrder
+        );
+        if (restRes.success && restRes.data) {
+          setRoom(restRes.data.room);
+          return;
+        } else {
+          setStartError(restRes.message || res.message || 'Failed to start game.');
+          return;
+        }
+      }
+
       if (res.success && res.room) {
         setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
-      } else {
-        setStartError(res.message || 'Failed to start game.');
+      } else if (res.success) {
+        const fresh = await roomService.getRoom(room.roomCode);
+        if (fresh.success && fresh.data) {
+          setRoom(fresh.data);
+        }
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error starting game';
-      setStartError(msg);
+      // Fallback on error
+      try {
+        const restRes = await roomService.startGame(
+          room.roomCode,
+          currentPlayer.id,
+          configuredTurnOrder
+        );
+        if (restRes.success && restRes.data) {
+          setRoom(restRes.data.room);
+          return;
+        }
+        setStartError(restRes.message || 'Failed to start game.');
+      } catch {
+        const msg = err instanceof Error ? err.message : 'Error starting game';
+        setStartError(msg);
+      }
     } finally {
       setIsStarting(false);
     }

@@ -29,7 +29,7 @@ import { RoomLobbyView } from '../components/room/RoomLobbyView';
 
 export function CreateGamePage() {
   // Form State
-  const [hostName, setHostName] = useState('MasterCaller');
+  const [hostName, setHostName] = useState('');
   const [gridSize, setGridSize] = useState<number>(5);
   const [playerLimit, setPlayerLimit] = useState<number>(10);
   const [winningWord, setWinningWord] = useState<string>('BINGO');
@@ -182,16 +182,17 @@ export function CreateGamePage() {
                 type="text"
                 value={hostName}
                 onChange={(e) => setHostName(e.target.value)}
-                placeholder="e.g. MasterCaller"
+                placeholder="Enter host nickname (e.g. HostPlayer)"
                 maxLength={20}
                 className="w-full px-4 py-3 rounded-xl bg-arcade-bg border border-arcade-border text-white text-sm focus:outline-none focus:border-arcade-purple focus:ring-1 focus:ring-arcade-purple transition"
               />
-              {!nameValidation.isValid ? (
+              {hostName.trim().length > 0 && !nameValidation.isValid && (
                 <p className="mt-1.5 text-xs text-rose-400 flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5" />
                   <span>{nameValidation.message}</span>
                 </p>
-              ) : (
+              )}
+              {hostName.trim().length > 0 && nameValidation.isValid && (
                 <p className="mt-1.5 text-xs text-emerald-400 flex items-center gap-1">
                   <Check className="w-3.5 h-3.5" />
                   <span>Display name is ready</span>

@@ -13,6 +13,7 @@ export function getAllowedOrigins(): string[] {
     'http://localhost:3000',
     'http://localhost:5000',
     'http://localhost:5001',
+    'https://bingo-arena-one.vercel.app',
   ];
 
   if (config.clientUrl) {
@@ -40,11 +41,8 @@ export function isOriginAllowed(origin: string | undefined): boolean {
   // Exact configured origin match
   if (allowed.includes(normalized)) return true;
 
-  // Allow Vercel preview deployments when CLIENT_URL is a Vercel domain or in production
-  if (
-    normalized.endsWith('.vercel.app') &&
-    allowed.some((a) => a.includes('.vercel.app'))
-  ) {
+  // Allow all Vercel deployments (production, preview, staging)
+  if (normalized.endsWith('.vercel.app') || normalized.includes('vercel.app')) {
     return true;
   }
 

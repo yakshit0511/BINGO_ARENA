@@ -4,7 +4,9 @@ const rawSocketUrl =
   import.meta.env.VITE_SOCKET_URL ||
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_API_URL ||
-  'http://localhost:5001';
+  (import.meta.env.PROD
+    ? 'https://bingo-arena-92ne.onrender.com'
+    : 'http://localhost:5001');
 
 const SERVER_URL = rawSocketUrl.replace(/\/+$/, '');
 
@@ -35,11 +37,11 @@ export function getSocket(): Socket {
     socketInstance = io(SERVER_URL, {
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 15,
+      reconnectionAttempts: 20,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 10000,
-      transports: ['websocket', 'polling'],
+      timeout: 15000,
+      transports: ['polling', 'websocket'],
       withCredentials: true,
     });
 
@@ -185,6 +187,14 @@ export function startGameSocket(
   const socket = getSocket();
 
   return new Promise((resolve) => {
+    let resolved = false;
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve({ success: false, message: 'Socket start timed out. Falling back to REST API...' });
+      }
+    }, 3500);
+
     if (!socket.connected) {
       socket.connect();
     }
@@ -196,7 +206,11 @@ export function startGameSocket(
     };
 
     socket.emit('game:start', payload, (res: { success: boolean; message?: string; room?: unknown }) => {
-      resolve(res || { success: false, message: 'No response from server.' });
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve(res || { success: false, message: 'No response from server.' });
+      }
     });
   });
 }
