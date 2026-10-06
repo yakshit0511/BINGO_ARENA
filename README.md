@@ -291,5 +291,4 @@ npm run client
 - **Turn Rotation & Number Calling**: Calling queue, called number history, and host/random call timers.
 - **Automatic Win Detection**: Server verification of row, column, and diagonal line completions.
 - **Podium & Match Scorecards**: Real-time end-of-game victory flows and match outcomes.
-#   B I N G O _ A R E N A  
- 
+#
