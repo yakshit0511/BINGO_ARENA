@@ -832,8 +832,8 @@ export const roomService = {
     // 5. Determine final turn order
     let finalOrder: string[] = [];
 
-    // If customOrder was provided in the start request, validate it
-    if (customOrder && Array.isArray(customOrder)) {
+    // If customOrder was provided and non-empty in the start request, validate it
+    if (customOrder && Array.isArray(customOrder) && customOrder.length > 0) {
       const customVal = validateTurnOrderInput(customOrder, room.players);
       if (!customVal.isValid || !customVal.cleanOrder) {
         return {

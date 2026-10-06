@@ -58,9 +58,18 @@ export function TurnOrderConfig({
     if (!isMatching) {
       const remaining = playerIds.filter((id) => !existingSet.has(id));
       const validExisting = order.filter((id) => playerIds.includes(id));
-      setOrder([...validExisting, ...remaining]);
+      const updatedOrder = [...validExisting, ...remaining];
+      setOrder(updatedOrder);
+      onOrderChange(updatedOrder);
     }
   }, [configuredOrder, players]);
+
+  // Ensure parent is notified of the active order on mount if configuredOrder is empty
+  useEffect(() => {
+    if (order.length > 0 && (!configuredOrder || configuredOrder.length !== order.length)) {
+      onOrderChange(order);
+    }
+  }, [order, configuredOrder, onOrderChange]);
 
   // Handle Move Up
   const handleMoveUp = (index: number) => {

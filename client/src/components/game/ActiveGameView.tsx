@@ -298,18 +298,6 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     };
   }, [room.roomCode, currentPlayer.id]);
 
-  // Guaranteed polling heartbeat: keeps game state synchronized even if socket drops
-  useEffect(() => {
-    const interval = setInterval(() => {
-      roomService.getRoom(room.roomCode).then((res) => {
-        if (res.success && res.data) {
-          setRoom(res.data);
-        }
-      }).catch(() => {});
-    }, 1500);
-
-    return () => clearInterval(interval);
-  }, [room.roomCode]);
 
   // Handler for caller selecting a number from the grid
   const handleCallNumber = async (num: number) => {

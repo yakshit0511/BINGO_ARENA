@@ -223,19 +223,24 @@ export function RoomLobbyView({
     };
   }, [room.roomCode, currentPlayer.id]);
 
-  // Guaranteed polling fallback: refreshes room state every 1.5s so board submissions and new joins sync automatically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      roomService.getRoom(room.roomCode).then((res) => {
-        if (res.success && res.data) {
-          setRoom(res.data);
-          onRoomUpdate?.(res.data);
-        }
-      }).catch(() => {});
-    }, 1500);
-
-    return () => clearInterval(interval);
-  }, [room.roomCode, onRoomUpdate]);
+  // Resolve guaranteed complete turn order (User-configured order, room turn order, or default Host-first)
+  const getEffectiveTurnOrder = (): string[] => {
+    if (configuredTurnOrder && configuredTurnOrder.length === room.players.length) {
+      const pIds = new Set(room.players.map((p) => p.id));
+      if (configuredTurnOrder.every((id) => pIds.has(id))) {
+        return configuredTurnOrder;
+      }
+    }
+    if (room.turnOrder && room.turnOrder.length === room.players.length) {
+      const pIds = new Set(room.players.map((p) => p.id));
+      if (room.turnOrder.every((id) => pIds.has(id))) {
+        return room.turnOrder;
+      }
+    }
+    const host = room.players.find((p) => p.id === room.hostId || p.isHost);
+    const nonHosts = room.players.filter((p) => p.id !== host?.id);
+    return host ? [host.id, ...nonHosts.map((p) => p.id)] : room.players.map((p) => p.id);
+  };
 
   const handleTurnOrderChange = async (newOrder: string[]) => {
     setConfiguredTurnOrder(newOrder);
@@ -252,9 +257,10 @@ export function RoomLobbyView({
     if (!isHost || isStarting) return;
     setIsStarting(true);
     setStartError(null);
+    const orderToSend = getEffectiveTurnOrder();
     try {
       // 1. Attempt via Socket.IO
-      const res = await startGameSocket(room.roomCode, currentPlayer.id, configuredTurnOrder);
+      const res = await startGameSocket(room.roomCode, currentPlayer.id, orderToSend);
 
       // 2. If socket was not acknowledged or failed, fallback to REST API
       if (!res.success) {
@@ -262,7 +268,7 @@ export function RoomLobbyView({
         const restRes = await roomService.startGame(
           room.roomCode,
           currentPlayer.id,
-          configuredTurnOrder
+          orderToSend
         );
         if (restRes.success && restRes.data) {
           setRoom(restRes.data.room);

@@ -162,19 +162,6 @@ export function BoardSetupView({
     };
   }, [room.roomCode, currentPlayer.id, currentPlayer.hasSubmitted, totalNumbers, onRoomUpdate]);
 
-  // Guaranteed polling fallback during board setup to keep all player statuses synchronized
-  useEffect(() => {
-    const interval = setInterval(() => {
-      roomService.getRoom(room.roomCode).then((res) => {
-        if (res.success && res.data) {
-          setRoom(res.data);
-          onRoomUpdate?.(res.data);
-        }
-      }).catch(() => {});
-    }, 1500);
-
-    return () => clearInterval(interval);
-  }, [room.roomCode, onRoomUpdate]);
 
   // Click empty cell to place next sequential number
   const handleCellClick = (index: number) => {

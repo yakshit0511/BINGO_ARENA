@@ -119,7 +119,7 @@ export function GameRoomPage() {
           setCurrentRoom(res.data);
         }
       }).catch(() => {});
-    }, 1500);
+    }, 2500);
 
     return () => clearInterval(interval);
   }, [currentRoom?.roomCode]);
