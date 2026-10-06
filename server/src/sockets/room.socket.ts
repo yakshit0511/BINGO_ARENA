@@ -205,6 +205,97 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
   );
 
   /**
+   * Event: room:player:kick
+   * Host removes a player from the room.
+   */
+  socket.on(
+    'room:player:kick',
+    async (
+      payload: { roomCode: string; hostPlayerId: string; targetPlayerId: string },
+      callback?: AckCallback
+    ) => {
+      try {
+        const roomCode = String(payload?.roomCode || '').trim().toUpperCase();
+        const hostPlayerId = String(payload?.hostPlayerId || '').trim();
+        const targetPlayerId = String(payload?.targetPlayerId || '').trim();
+
+        const result = await roomService.kickPlayer(roomCode, hostPlayerId, targetPlayerId);
+        if (!result.success || !result.data) {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: result.message });
+          }
+          return;
+        }
+
+        const socketRoomName = getSocketRoomName(roomCode);
+        // Broadcast kick event so the target player immediately navigates home
+        io.to(socketRoomName).emit('room:player:kicked', {
+          kickedPlayerId: targetPlayerId,
+          playerName: result.data.kickedPlayerName,
+          message: 'You have been removed from the room by the host.',
+        });
+        // Broadcast updated room state
+        io.to(socketRoomName).emit('room:state', result.data.room);
+
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            message: result.message,
+            room: result.data.room,
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.IO] Error in room:player:kick:', error);
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Internal server error kicking player.' });
+        }
+      }
+    }
+  );
+
+  /**
+   * Event: room:marking-mode:update
+   * Host updates the marking mode ('auto' | 'manual').
+   */
+  socket.on(
+    'room:marking-mode:update',
+    async (
+      payload: { roomCode: string; hostPlayerId: string; markingMode: 'auto' | 'manual' },
+      callback?: AckCallback
+    ) => {
+      try {
+        const roomCode = String(payload?.roomCode || '').trim().toUpperCase();
+        const hostPlayerId = String(payload?.hostPlayerId || '').trim();
+        const markingMode = payload?.markingMode === 'manual' ? 'manual' : 'auto';
+
+        const result = await roomService.updateMarkingMode(roomCode, hostPlayerId, markingMode);
+        if (!result.success || !result.data) {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: result.message });
+          }
+          return;
+        }
+
+        const socketRoomName = getSocketRoomName(roomCode);
+        io.to(socketRoomName).emit('room:state', result.data.room);
+
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            message: result.message,
+            room: result.data.room,
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.IO] Error in room:marking-mode:update:', error);
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Internal server error updating marking mode.' });
+        }
+      }
+    }
+  );
+
+  /**
    * Event: board:submit
    * Validates, saves, and broadcasts a player's Bingo board submission.
    */

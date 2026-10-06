@@ -5,9 +5,11 @@ import { TiltCard } from '../ui/TiltCard';
 interface RoomConfigCardProps {
   config: GameConfig;
   className?: string;
+  isHost?: boolean;
+  onToggleMarkingMode?: (mode: 'auto' | 'manual') => void;
 }
 
-export function RoomConfigCard({ config, className = '' }: RoomConfigCardProps) {
+export function RoomConfigCard({ config, className = '', isHost = false, onToggleMarkingMode }: RoomConfigCardProps) {
   const totalNumbers = config.gridSize * config.gridSize;
 
   return (
@@ -80,16 +82,45 @@ export function RoomConfigCard({ config, className = '' }: RoomConfigCardProps) 
         </div>
 
         {/* Host Status */}
-        <div className="p-3 rounded-xl bg-arcade-surface/80 border border-arcade-border col-span-2 sm:col-span-2">
+        <div className="p-3 rounded-xl bg-arcade-surface/80 border border-arcade-border">
           <div className="text-[10px] font-bold uppercase tracking-wider text-arcade-muted flex items-center gap-1 mb-1">
             <ShieldCheck className="w-3 h-3 text-emerald-400" />
             <span>Host Role</span>
           </div>
           <div className="text-sm font-black text-white">
-            {config.hostParticipates ? 'Host Plays (Receives Board)' : 'Host Spectates Only'}
+            {config.hostParticipates ? 'Host Plays' : 'Host Spectates'}
           </div>
           <div className="text-[10px] text-slate-400">
-            Counts as 1 of the {config.playerLimit} player slots
+            {config.playerLimit} slots max
+          </div>
+        </div>
+
+        {/* Marking Mode (Manual vs Auto) */}
+        <div className="p-3 rounded-xl bg-arcade-surface/80 border border-arcade-border col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-arcade-muted flex items-center gap-1">
+              <span className="text-sm">🎯</span>
+              <span>Marking Mode</span>
+            </div>
+            {isHost && onToggleMarkingMode && (
+              <button
+                type="button"
+                onClick={() => onToggleMarkingMode(config.markingMode === 'manual' ? 'auto' : 'manual')}
+                className="text-[10px] font-bold text-arcade-gold hover:text-yellow-300 underline underline-offset-2"
+                title="Toggle Marking Mode"
+              >
+                Change
+              </button>
+            )}
+          </div>
+          <div className="text-sm font-black text-white flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${config.markingMode === 'manual' ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+            <span>{config.markingMode === 'manual' ? 'Manual Cross' : 'Auto-Daub'}</span>
+          </div>
+          <div className="text-[10px] text-arcade-muted">
+            {config.markingMode === 'manual' 
+              ? 'Players tap board to cross' 
+              : 'Auto cross called numbers'}
           </div>
         </div>
       </div>

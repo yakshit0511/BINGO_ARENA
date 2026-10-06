@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -20,6 +20,7 @@ import {
 import { Room, Player, GameState } from '../../types';
 import { BingoBoard } from '../board/BingoBoard';
 import { soundManager } from '../../lib/sound';
+import { evaluateBoardLines } from '../../utils/bingoEvaluator';
 import { NumberCallerGrid } from './NumberCallerGrid';
 import { CurrentNumberBall } from './CurrentNumberBall';
 import { RecentCallsList } from './RecentCallsList';
@@ -27,7 +28,6 @@ import { WinnerModal } from './WinnerModal';
 import {
   getSocket,
   onSocketStatusChange,
-  SocketConnectionStatus,
   callNumberSocket,
   requestGameStateSocket,
   joinRoomSocket,
@@ -53,7 +53,6 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
   const [callingNumberVal, setCallingNumberVal] = useState<number | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
   const [isRestartingMatch, setIsRestartingMatch] = useState(false);
-  const [socketStatus, setSocketStatus] = useState<SocketConnectionStatus>('CONNECTED');
   const [mobileView, setMobileView] = useState<'both' | 'board' | 'numbers'>('both');
 
   // Real-time letter achievement popup for all players
@@ -68,13 +67,6 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
   const [letterAchievement, setLetterAchievement] = useState<LetterAchievement | null>(null);
   const prevPlayersLettersRef = useRef<Record<string, number>>({});
 
-  // Monitor real-time socket connection health
-  useEffect(() => {
-    return onSocketStatusChange((status) => {
-      setSocketStatus(status);
-    });
-  }, []);
-
   // Sync prop changes
   useEffect(() => {
     setRoom(initialRoom);
@@ -88,6 +80,48 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
   const playerBoard = myPlayer.board || currentPlayer.board || [];
   const myEarnedLetters = myPlayer.earnedLetters || [];
   const myCompletedLines = myPlayer.completedLines || [];
+
+  // Manual marking mode (Party / In-Person Mode)
+  const isManualMode = room.config?.markingMode === 'manual';
+  const [manuallyMarked, setManuallyMarked] = useState<number[]>([]);
+
+  // Clear manual markings when a new round or rematch starts
+  useEffect(() => {
+    setManuallyMarked([]);
+  }, [room.game?.roundNumber]);
+
+  // Compute completed lines locally in manual mode
+  const manualEval = useMemo(() => {
+    if (!isManualMode) return null;
+    return evaluateBoardLines(gridSize, playerBoard, manuallyMarked);
+  }, [isManualMode, gridSize, playerBoard, manuallyMarked]);
+
+  const effectiveCompletedLines = isManualMode && manualEval
+    ? manualEval.completedLines
+    : myCompletedLines;
+
+  const effectiveCompletedLetters = isManualMode && manualEval
+    ? Math.min(manualEval.completedCount, room.config.winningWord.length)
+    : (myEarnedLetters.length || Math.min(myCompletedLines.length, room.config.winningWord.length));
+
+  const handleBoardCellClick = (_index: number, val?: number) => {
+    if (!isManualMode || val === undefined) return;
+
+    const currentCalled = room.game?.calledNumbers || [];
+    if (!currentCalled.includes(val)) {
+      setCallError(`Number #${val} has not been called yet!`);
+      return;
+    }
+
+    setCallError(null);
+    soundManager.playButtonClick();
+    setManuallyMarked((prev) => {
+      if (prev.includes(val)) {
+        return prev.filter((n) => n !== val);
+      }
+      return [...prev, val];
+    });
+  };
 
   // Determine current player
   const currentTurnPlayerId = game?.currentPlayerId;
@@ -270,6 +304,16 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
       }
     });
 
+    const handlePlayerKicked = (data: { kickedPlayerId?: string; message?: string }) => {
+      if (data?.kickedPlayerId === currentPlayer.id) {
+        clearPlayerSession();
+        navigate('/', {
+          replace: true,
+          state: { kickedMessage: data.message || 'You were removed from the room by the host.' },
+        });
+      }
+    };
+
     socket.on('room:state', handleRoomState);
     socket.on('game:state', handleGameState);
     socket.on('game:number:called', handleNumberCalled);
@@ -280,6 +324,7 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     socket.on('game:rematch', handleGameRematch);
     socket.on('game:ended', handleGameEnded);
     socket.on('room:closed', handleRoomClosed);
+    socket.on('room:player:kicked', handlePlayerKicked);
     socket.on('game:error', handleGameError);
 
     return () => {
@@ -294,9 +339,10 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
       socket.off('game:rematch', handleGameRematch);
       socket.off('game:ended', handleGameEnded);
       socket.off('room:closed', handleRoomClosed);
+      socket.off('room:player:kicked', handlePlayerKicked);
       socket.off('game:error', handleGameError);
     };
-  }, [room.roomCode, currentPlayer.id]);
+  }, [room.roomCode, currentPlayer.id, navigate]);
 
 
   // Handler for caller selecting a number from the grid
@@ -459,7 +505,6 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
   };
 
   const winningWord = room.config.winningWord;
-  const completedLetters = myEarnedLetters.length;
   const calledNumbers = game?.calledNumbers || [];
   const currentNumber =
     game?.currentNumber ?? (calledNumbers.length > 0 ? calledNumbers[calledNumbers.length - 1] : null);
@@ -471,14 +516,6 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-6 sm:py-8 space-y-6 select-none relative">
-      {/* RECONNECTING ALERT BANNER */}
-      {socketStatus !== 'CONNECTED' && (
-        <div className="w-full px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 flex items-center justify-center gap-2 text-xs sm:text-sm font-bold shadow-lg animate-pulse">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-          <span>RECONNECTING... Restoring real-time multiplayer connection</span>
-        </div>
-      )}
-
       {/* ROOM CLOSED OVERLAY */}
       {isRoomClosed && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
@@ -757,17 +794,17 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
               <span>TARGET ({winningWord})</span>
             </div>
             <div className="text-[11px] font-mono font-bold text-slate-300 mt-0.5">
-              <strong className="text-arcade-gold">{completedLetters}</strong> / {winningWord.length} Letters
+              <strong className="text-arcade-gold">{effectiveCompletedLetters}</strong> / {winningWord.length} Letters
             </div>
             <span className="text-[10px] text-arcade-muted block">
-              {myCompletedLines.length} line(s) done
+              {effectiveCompletedLines.length} line(s) done
             </span>
           </div>
 
           {/* Letter Chips */}
           <div className="flex items-center gap-1 shrink-0">
             {winningWord.split('').map((letter, idx) => {
-              const isUnlocked = idx < completedLetters;
+              const isUnlocked = idx < effectiveCompletedLetters;
               return (
                 <motion.div
                   key={idx}
@@ -865,11 +902,11 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
       </div>
 
       {/* 3. MAIN ARENA: SIDE-BY-SIDE BOARD & NUMBER SELECTOR */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6 items-start">
+      <div className={`grid grid-cols-1 ${isManualMode && !isMyTurn ? 'max-w-2xl mx-auto' : 'lg:grid-cols-2'} gap-3 sm:gap-6 items-start`}>
         {/* LEFT BOX: YOUR BOARD (N×N) */}
         <div
           className={`rounded-3xl bg-arcade-card/90 border-2 border-arcade-border p-3 sm:p-5 shadow-arcade-card space-y-3 flex flex-col justify-between ${
-            mobileView === 'numbers' ? 'hidden lg:flex' : 'flex'
+            mobileView === 'numbers' && (!isManualMode || isMyTurn) ? 'hidden lg:flex' : 'flex'
           }`}
         >
           <div className="flex items-center justify-between text-xs pb-2.5 border-b border-arcade-border/80">
@@ -882,10 +919,14 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
             <div className="flex items-center gap-2">
               <span className="px-2 py-0.5 rounded-full bg-arcade-magenta/20 border border-arcade-magenta/40 text-fuchsia-300 text-[10px] font-black flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3 text-amber-300" />
-                <span>{myCompletedLines.length} Lines Done</span>
+                <span>{effectiveCompletedLines.length} Lines Done</span>
               </span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-black">
-                AUTO-EVALUATED
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                isManualMode
+                  ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
+                  : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+              }`}>
+                {isManualMode ? 'MANUAL MARKING' : 'AUTO-EVALUATED'}
               </span>
             </div>
           </div>
@@ -894,50 +935,57 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
           <BingoBoard
             gridSize={gridSize}
             cells={playerBoard}
-            onCellClick={() => {}}
+            onCellClick={handleBoardCellClick}
             nextNumber={null}
             isLocked={true}
             calledNumbers={calledNumbers}
-            completedLines={myCompletedLines}
+            markedNumbers={isManualMode ? manuallyMarked : calledNumbers}
+            manualMarking={isManualMode}
+            completedLines={effectiveCompletedLines}
           />
 
           <p className="text-[11px] text-center text-arcade-muted pt-1">
-            Completed lines glow brightly with amber aura. Each finished line unlocks the next letter.
+            {isManualMode
+              ? 'Tap any called number on your board to cross it off. Lines form as you mark them!'
+              : 'Completed lines glow brightly with amber aura. Each finished line unlocks the next letter.'}
           </p>
         </div>
 
         {/* RIGHT BOX: NUMBER SELECTOR (N² NUMBERS) */}
-        <div className={`h-full ${mobileView === 'board' ? 'hidden lg:block' : 'block'}`}>
-          {/* Quick Return to Board link on mobile when in numbers view */}
-          {mobileView === 'numbers' && (
-            <div className="lg:hidden flex justify-end pb-1.5">
-              <button
-                type="button"
-                onClick={() => setMobileView('board')}
-                className="text-xs font-bold text-arcade-gold flex items-center gap-1 hover:underline"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Switch to My Board</span>
-              </button>
-            </div>
-          )}
+        {/* If in manual mode, the number selector is only visible when it is this player's turn to call */}
+        {(!isManualMode || isMyTurn) && (
+          <div className={`h-full ${mobileView === 'board' ? 'hidden lg:block' : 'block'}`}>
+            {/* Quick Return to Board link on mobile when in numbers view */}
+            {mobileView === 'numbers' && (
+              <div className="lg:hidden flex justify-end pb-1.5">
+                <button
+                  type="button"
+                  onClick={() => setMobileView('board')}
+                  className="text-xs font-bold text-arcade-gold flex items-center gap-1 hover:underline"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Switch to My Board</span>
+                </button>
+              </div>
+            )}
 
-          <NumberCallerGrid
-            gridSize={gridSize}
-            calledNumbers={calledNumbers}
-            isMyTurn={isMyTurn && !game?.finishedPlayerIds?.includes(currentPlayer.id)}
-            currentCallerName={currentTurnPlayer?.name || 'Active Player'}
-            isProcessing={isCallingNumber}
-            processingNumber={callingNumberVal}
-            onCallNumber={handleCallNumber}
-            isGameOver={isGameOver}
-            gameOverMessage={
-              isWon
-                ? `🏆 Match concluded! Winner: ${game.winnerName}`
-                : 'Match finished. All numbers called.'
-            }
-          />
-        </div>
+            <NumberCallerGrid
+              gridSize={gridSize}
+              calledNumbers={calledNumbers}
+              isMyTurn={isMyTurn && !game?.finishedPlayerIds?.includes(currentPlayer.id)}
+              currentCallerName={currentTurnPlayer?.name || 'Active Player'}
+              isProcessing={isCallingNumber}
+              processingNumber={callingNumberVal}
+              onCallNumber={handleCallNumber}
+              isGameOver={isGameOver}
+              gameOverMessage={
+                isWon
+                  ? `🏆 Match concluded! Winner: ${game.winnerName}`
+                  : 'Match finished. All numbers called.'
+              }
+            />
+          </div>
+        )}
       </div>
 
       {/* Floating Call Alert on Mobile when Viewing Board */}

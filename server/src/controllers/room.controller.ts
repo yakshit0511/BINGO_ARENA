@@ -163,6 +163,107 @@ export async function leaveRoomHandler(req: Request, res: Response): Promise<voi
 }
 
 /**
+ * POST /api/rooms/:roomCode/kick
+ * Host removes/kicks a player from the room.
+ */
+export async function kickPlayerHandler(req: Request, res: Response): Promise<void> {
+  const rawCode = Array.isArray(req.params.roomCode)
+    ? req.params.roomCode[0]
+    : req.params.roomCode;
+  const roomCode = String(rawCode || '').trim().toUpperCase();
+  const hostPlayerId = String(req.body?.hostPlayerId || '').trim();
+  const targetPlayerId = String(req.body?.targetPlayerId || '').trim();
+
+  if (!roomCode || !hostPlayerId || !targetPlayerId) {
+    res.status(400).json({
+      success: false,
+      message: 'Room code, hostPlayerId, and targetPlayerId are required.',
+    });
+    return;
+  }
+
+  try {
+    const result = await roomService.kickPlayer(roomCode, hostPlayerId, targetPlayerId);
+
+    if (result.success && result.data) {
+      try {
+        const io: Server | undefined = (req.app.get('io') as Server) || getIO();
+        if (io) {
+          io.to(`room:${roomCode}`).emit('room:player:kicked', {
+            kickedPlayerId: targetPlayerId,
+            playerName: result.data.kickedPlayerName,
+            message: 'You have been removed from the room by the host.',
+          });
+          io.to(`room:${roomCode}`).emit('room:state', result.data.room);
+        }
+      } catch (err) {
+        console.warn('Socket broadcast warning in kickPlayerHandler:', err);
+      }
+    }
+
+    res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error in kickPlayerHandler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while kicking player.',
+    });
+  }
+}
+
+/**
+ * PATCH /api/rooms/:roomCode/marking-mode
+ * Host updates room marking mode ('auto' | 'manual').
+ */
+export async function updateMarkingModeHandler(req: Request, res: Response): Promise<void> {
+  const rawCode = Array.isArray(req.params.roomCode)
+    ? req.params.roomCode[0]
+    : req.params.roomCode;
+  const roomCode = String(rawCode || '').trim().toUpperCase();
+  const hostPlayerId = String(req.body?.hostPlayerId || '').trim();
+  const markingMode = req.body?.markingMode === 'manual' ? 'manual' : 'auto';
+
+  if (!roomCode || !hostPlayerId) {
+    res.status(400).json({
+      success: false,
+      message: 'Room code and hostPlayerId are required.',
+    });
+    return;
+  }
+
+  try {
+    const result = await roomService.updateMarkingMode(roomCode, hostPlayerId, markingMode);
+
+    if (result.success && result.data) {
+      try {
+        const io: Server | undefined = (req.app.get('io') as Server) || getIO();
+        if (io) {
+          io.to(`room:${roomCode}`).emit('room:state', result.data.room);
+        }
+      } catch (err) {
+        console.warn('Socket broadcast warning in updateMarkingModeHandler:', err);
+      }
+    }
+
+    res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error in updateMarkingModeHandler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while updating marking mode.',
+    });
+  }
+}
+
+/**
  * POST /api/rooms/:roomCode/players/:playerId/board
  * Validate, save, and lock a player's Bingo board arrangement.
  */

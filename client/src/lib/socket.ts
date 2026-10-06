@@ -237,6 +237,42 @@ export function updateTurnOrderSocket(
 }
 
 /**
+ * Host kicks a player via socket.
+ */
+export function kickPlayerSocket(
+  roomCode: string,
+  hostPlayerId: string,
+  targetPlayerId: string
+): Promise<{ success: boolean; message?: string; room?: unknown }> {
+  const socket = getSocket();
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    hostPlayerId: hostPlayerId.trim(),
+    targetPlayerId: targetPlayerId.trim(),
+  };
+
+  return emitWithTimeout(socket, 'room:player:kick', payload, 3500, 'Kick player socket timed out.');
+}
+
+/**
+ * Host updates room marking mode via socket ('auto' | 'manual').
+ */
+export function updateMarkingModeSocket(
+  roomCode: string,
+  hostPlayerId: string,
+  markingMode: 'auto' | 'manual'
+): Promise<{ success: boolean; message?: string; room?: unknown }> {
+  const socket = getSocket();
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    hostPlayerId: hostPlayerId.trim(),
+    markingMode,
+  };
+
+  return emitWithTimeout(socket, 'room:marking-mode:update', payload, 3500, 'Update marking mode socket timed out.');
+}
+
+/**
  * Emit game start via socket with server acknowledgement.
  */
 export function startGameSocket(

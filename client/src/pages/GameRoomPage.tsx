@@ -99,16 +99,28 @@ export function GameRoomPage() {
       setCurrentRoom((prev) => (prev ? { ...prev, status: 'closed' } : null));
     };
 
+    const handlePlayerKicked = (data: { kickedPlayerId?: string; message?: string }) => {
+      if (data?.kickedPlayerId === currentPlayer?.id) {
+        clearPlayerSession();
+        navigate('/', {
+          replace: true,
+          state: { kickedMessage: data.message || 'You were removed from the room by the host.' },
+        });
+      }
+    };
+
     socket.on('room:state', handleRoomState);
     socket.on('game:started', handleGameStarted);
     socket.on('room:closed', handleRoomClosed);
+    socket.on('room:player:kicked', handlePlayerKicked);
 
     return () => {
       socket.off('room:state', handleRoomState);
       socket.off('game:started', handleGameStarted);
       socket.off('room:closed', handleRoomClosed);
+      socket.off('room:player:kicked', handlePlayerKicked);
     };
-  }, [currentRoom?.roomCode, currentPlayer?.id]);
+  }, [currentRoom?.roomCode, currentPlayer?.id, navigate]);
 
   // Periodic heartbeat polling as guaranteed fallback when socket drops/reconnects
   useEffect(() => {

@@ -5,10 +5,12 @@ import { Lock, Sparkles } from 'lucide-react';
 interface BingoBoardProps {
   gridSize: number;
   cells: (number | null)[];
-  onCellClick?: (index: number) => void;
+  onCellClick?: (index: number, value?: number) => void;
   nextNumber?: number | null;
   isLocked: boolean;
   calledNumbers?: number[];
+  markedNumbers?: number[];
+  manualMarking?: boolean;
   completedLines?: string[];
   className?: string;
 }
@@ -20,11 +22,19 @@ export function BingoBoard({
   nextNumber,
   isLocked,
   calledNumbers,
+  markedNumbers,
+  manualMarking = false,
   completedLines,
   className = '',
 }: BingoBoardProps) {
   // Efficient Set-based lookup for called numbers
   const calledSet = useMemo(() => new Set(calledNumbers || []), [calledNumbers]);
+
+  // For manual marking mode, use markedNumbers; otherwise fall back to calledNumbers
+  const markedSet = useMemo(() => {
+    if (!manualMarking) return calledSet;
+    return new Set(markedNumbers || []);
+  }, [manualMarking, markedNumbers, calledSet]);
 
   // Compute set of cell indices that belong to completed lines
   const completedLineIndices = useMemo(() => {
@@ -89,8 +99,13 @@ export function BingoBoard({
           {cells.map((value, index) => {
             const isFilled = value !== null;
             const isCalled = isFilled && calledSet.has(value);
+            const isMarked = isFilled && markedSet.has(value);
             const isLineComplete = isFilled && completedLineIndices.has(index);
-            const canClick = !isFilled && !isLocked && nextNumber !== null && typeof onCellClick === 'function';
+            const isWaitingToCross = manualMarking && isCalled && !isMarked;
+
+            const canClick =
+              (!isFilled && !isLocked && nextNumber !== null && typeof onCellClick === 'function') ||
+              (isFilled && isLocked && manualMarking && typeof onCellClick === 'function');
 
             return (
               <button
@@ -99,7 +114,7 @@ export function BingoBoard({
                 disabled={!canClick}
                 onClick={() => {
                   if (canClick && onCellClick) {
-                    onCellClick(index);
+                    onCellClick(index, value !== null ? value : undefined);
                   }
                 }}
                 className={`
@@ -108,10 +123,12 @@ export function BingoBoard({
                   ${
                     isLineComplete
                       ? 'bg-gradient-to-br from-amber-300 via-orange-500 to-fuchsia-600 border-2 border-yellow-100 text-slate-950 font-black shadow-[0_0_25px_rgba(251,191,36,0.9),0_0_15px_rgba(217,70,239,0.7)] scale-[1.06] z-20 cursor-default animate-pulse'
-                      : isCalled
-                      ? 'bg-gradient-to-br from-amber-400 via-arcade-gold to-yellow-500 border-2 border-yellow-200 text-slate-950 font-black shadow-[0_0_20px_rgba(251,191,36,0.65)] scale-[1.03] z-10 cursor-default'
+                      : isMarked
+                      ? `bg-gradient-to-br from-amber-400 via-arcade-gold to-yellow-500 border-2 border-yellow-200 text-slate-950 font-black shadow-[0_0_20px_rgba(251,191,36,0.65)] scale-[1.03] z-10 ${manualMarking ? 'cursor-pointer hover:scale-105' : 'cursor-default'}`
+                      : isWaitingToCross
+                      ? 'bg-gradient-to-br from-amber-950 via-purple-950 to-arcade-surface border-2 border-amber-400 text-amber-200 font-black shadow-[0_0_20px_rgba(251,191,36,0.85)] ring-2 ring-amber-300 animate-pulse scale-[1.04] z-15 cursor-pointer hover:scale-105'
                       : isFilled
-                      ? 'bg-gradient-to-br from-arcade-purple via-fuchsia-900 to-slate-900 border-2 border-fuchsia-400/60 text-white shadow-[0_0_12px_rgba(217,70,239,0.3)] cursor-default'
+                      ? `bg-gradient-to-br from-arcade-purple via-fuchsia-900 to-slate-900 border-2 border-fuchsia-400/60 text-white shadow-[0_0_12px_rgba(217,70,239,0.3)] ${manualMarking ? 'cursor-pointer hover:border-amber-400/50' : 'cursor-default'}`
                       : isLocked
                       ? 'bg-arcade-surface/40 border border-arcade-border/40 text-arcade-muted/30 cursor-not-allowed'
                       : 'bg-arcade-surface/80 hover:bg-arcade-surface active:scale-95 border border-arcade-border hover:border-arcade-purple/70 text-slate-400 cursor-pointer shadow-[0_2px_4px_rgba(0,0,0,0.5)]'
@@ -130,9 +147,13 @@ export function BingoBoard({
                       <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3">
                         <Sparkles className="w-3 h-3 text-amber-200 animate-spin" />
                       </span>
-                    ) : isCalled ? (
+                    ) : isWaitingToCross ? (
+                      <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-80" />
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-300" />
+                      </span>
+                    ) : isMarked ? (
                       <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-100 opacity-75" />
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-300" />
                       </span>
                     ) : null}
@@ -163,7 +184,7 @@ export function BingoBoard({
           className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-xs font-black text-emerald-300"
         >
           <Lock className="w-3.5 h-3.5 text-emerald-400" />
-          <span>BOARD SUBMITTED & LOCKED</span>
+          <span>{manualMarking ? 'MANUAL MARKING ACTIVE (TAP TO CROSS)' : 'BOARD SUBMITTED & LOCKED'}</span>
         </motion.div>
       )}
     </div>

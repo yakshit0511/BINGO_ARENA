@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Copy,
@@ -27,6 +28,8 @@ import {
   SocketConnectionStatus,
   updateTurnOrderSocket,
   startGameSocket,
+  kickPlayerSocket,
+  updateMarkingModeSocket,
 } from '../../lib/socket';
 import { clearPlayerSession } from '../../lib/session';
 import { soundManager } from '../../lib/sound';
@@ -51,6 +54,7 @@ export function RoomLobbyView({
   onLeave,
   onRoomUpdate,
 }: RoomLobbyViewProps) {
+  const navigate = useNavigate();
   const [room, setRoom] = useState<Room>(initialRoom);
   const [viewMode, setViewMode] = useState<'LOBBY' | 'BOARD_SETUP'>('LOBBY');
   const [copied, setCopied] = useState(false);
@@ -194,9 +198,21 @@ export function RoomLobbyView({
       }
     };
 
+    // 10. Player kicked listener
+    const handlePlayerKicked = (data: { kickedPlayerId?: string; message?: string }) => {
+      if (data?.kickedPlayerId === currentPlayer.id) {
+        clearPlayerSession();
+        navigate('/', {
+          replace: true,
+          state: { kickedMessage: data.message || 'You were removed from the room by the host.' },
+        });
+      }
+    };
+
     socket.on('room:state', handleRoomState);
     socket.on('room:closed', handleRoomClosed);
     socket.on('room:turn-order:updated', handleTurnOrderUpdated);
+    socket.on('room:player:kicked', handlePlayerKicked);
     socket.on('game:started', handleGameStarted);
     socket.on('game:state', handleGameState);
     socket.on('game:rematch', handleGameRematch);
@@ -215,13 +231,14 @@ export function RoomLobbyView({
       socket.off('room:state', handleRoomState);
       socket.off('room:closed', handleRoomClosed);
       socket.off('room:turn-order:updated', handleTurnOrderUpdated);
+      socket.off('room:player:kicked', handlePlayerKicked);
       socket.off('game:started', handleGameStarted);
       socket.off('game:state', handleGameState);
       socket.off('game:rematch', handleGameRematch);
       socket.off('game:number:called', handleNumberCalled);
       socket.off('game:error', handleGameError);
     };
-  }, [room.roomCode, currentPlayer.id]);
+  }, [room.roomCode, currentPlayer.id, navigate]);
 
   // Resolve guaranteed complete turn order (User-configured order, room turn order, or default Host-first)
   const getEffectiveTurnOrder = (): string[] => {
@@ -250,6 +267,50 @@ export function RoomLobbyView({
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update turn order';
       setStartError(msg);
+    }
+  };
+
+  const handleKickPlayer = async (targetPlayerId: string) => {
+    if (!isHost) return;
+    try {
+      const res = await kickPlayerSocket(room.roomCode, currentPlayer.id, targetPlayerId);
+      if (res.success && res.room) {
+        const mapped = mapBackendRoomToClient(res.room as BackendPublicRoom);
+        setRoom(mapped);
+        onRoomUpdate?.(mapped);
+      }
+    } catch {
+      try {
+        const restRes = await roomService.kickPlayer(room.roomCode, currentPlayer.id, targetPlayerId);
+        if (restRes.success && restRes.data?.room) {
+          setRoom(restRes.data.room);
+          onRoomUpdate?.(restRes.data.room);
+        }
+      } catch (err: unknown) {
+        console.error('Kick player failed:', err);
+      }
+    }
+  };
+
+  const handleToggleMarkingMode = async (mode: 'auto' | 'manual') => {
+    if (!isHost) return;
+    try {
+      const res = await updateMarkingModeSocket(room.roomCode, currentPlayer.id, mode);
+      if (res.success && res.room) {
+        const mapped = mapBackendRoomToClient(res.room as BackendPublicRoom);
+        setRoom(mapped);
+        onRoomUpdate?.(mapped);
+      }
+    } catch {
+      try {
+        const restRes = await roomService.updateMarkingMode(room.roomCode, currentPlayer.id, mode);
+        if (restRes.success && restRes.data?.room) {
+          setRoom(restRes.data.room);
+          onRoomUpdate?.(restRes.data.room);
+        }
+      } catch (err: unknown) {
+        console.error('Toggle marking mode failed:', err);
+      }
     }
   };
 
@@ -586,6 +647,8 @@ export function RoomLobbyView({
             players={room.players}
             maxPlayers={room.config.playerLimit}
             currentUserId={currentPlayer.id}
+            isHost={isHost}
+            onKickPlayer={handleKickPlayer}
           />
 
           {/* Match Launch & Host Controls Card */}
@@ -717,7 +780,11 @@ export function RoomLobbyView({
 
         {/* Right Column (7 Cols): Rulebook & Dynamic Grid Preview */}
         <div className="lg:col-span-7 space-y-6">
-          <RoomConfigCard config={room.config} />
+          <RoomConfigCard
+            config={room.config}
+            isHost={isHost}
+            onToggleMarkingMode={handleToggleMarkingMode}
+          />
 
           <DynamicGridPreview config={room.config} hostName={room.hostName} />
         </div>

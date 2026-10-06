@@ -1,11 +1,13 @@
 import { motion } from 'framer-motion';
-import { Crown, Users, CheckCircle2, Clock, Wifi, WifiOff } from 'lucide-react';
+import { Crown, Users, CheckCircle2, Clock, Wifi, WifiOff, UserX } from 'lucide-react';
 import { Player } from '../../types';
 
 interface PlayerListProps {
   players: Player[];
   maxPlayers: number;
   currentUserId?: string;
+  isHost?: boolean;
+  onKickPlayer?: (playerId: string, playerName: string) => void;
   className?: string;
 }
 
@@ -13,6 +15,8 @@ export function PlayerList({
   players,
   maxPlayers,
   currentUserId,
+  isHost = false,
+  onKickPlayer,
   className = '',
 }: PlayerListProps) {
   return (
@@ -112,7 +116,7 @@ export function PlayerList({
                 </div>
               </div>
 
-              {/* Right Side: Board Readiness / Preparation Status */}
+              {/* Right Side: Board Readiness / Preparation Status & Host Kick */}
               <div className="flex items-center gap-1.5 shrink-0 text-xs font-semibold">
                 {player.hasSubmitted ? (
                   <span className="flex items-center gap-1 text-emerald-300 text-[11px] font-black px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30">
@@ -124,6 +128,23 @@ export function PlayerList({
                     <Clock className="w-3.5 h-3.5 text-amber-400" />
                     <span>Preparing…</span>
                   </span>
+                )}
+
+                {/* Host Kick Option */}
+                {isHost && !player.isHost && onKickPlayer && (
+                  <button
+                    type="button"
+                    title={`Remove ${player.name} from room`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`Are you sure you want to remove ${player.name} from the room?`)) {
+                        onKickPlayer(player.id, player.name);
+                      }
+                    }}
+                    className="p-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 hover:text-rose-100 transition-colors ml-1 focus:outline-none focus:ring-1 focus:ring-rose-400"
+                  >
+                    <UserX className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
             </motion.div>

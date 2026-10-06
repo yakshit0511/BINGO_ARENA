@@ -1,6 +1,6 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { PlusCircle, Users, Sparkles, ChevronDown } from 'lucide-react';
+import { PlusCircle, Users, Sparkles, ChevronDown, UserX } from 'lucide-react';
 import { BingoHero3D } from '../components/three/BingoHero3D';
 import { BingoLetters } from '../components/landing/BingoLetters';
 import { GameMockBoard } from '../components/landing/GameMockBoard';
@@ -9,6 +9,9 @@ import { Button } from '../components/ui/Button';
 import { PageTransition } from '../components/layout/PageTransition';
 
 export function HomePage() {
+  const location = useLocation();
+  const kickedMessage = (location.state as { kickedMessage?: string } | undefined)?.kickedMessage;
+
   const scrollToPreview = () => {
     document.getElementById('arena-preview')?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -31,6 +34,20 @@ export function HomePage() {
 
         {/* Foreground Hero Content Container */}
         <div className="relative z-10 max-w-4xl mx-auto w-full text-center flex flex-col items-center pointer-events-none">
+          {/* Host Kicked Alert Toast Banner */}
+          {kickedMessage && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: -20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="pointer-events-auto mb-6 px-5 py-3 rounded-2xl bg-rose-950/90 border-2 border-rose-500 text-rose-200 text-sm font-bold flex items-center gap-3 shadow-[0_0_30px_rgba(244,63,94,0.35)] backdrop-blur-md"
+            >
+              <div className="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center shrink-0">
+                <UserX className="w-4 h-4 text-rose-400" />
+              </div>
+              <span>{kickedMessage}</span>
+            </motion.div>
+          )}
+
           {/* Subtle Staged Tagline Badge */}
           <motion.div
             initial={{ opacity: 0, y: -12 }}

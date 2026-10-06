@@ -8,6 +8,7 @@ export interface ApiResponse<T = unknown> {
 }
 
 export type CallingMode = 'random' | 'turn-based';
+export type MarkingMode = 'auto' | 'manual';
 export type RoomStatus = 'waiting' | 'ready' | 'playing' | 'finished' | 'closed';
 export type GameStatus = 'waiting' | 'ready' | 'active' | 'won' | 'no_winner' | 'ended';
 
@@ -17,6 +18,7 @@ export interface GameConfig {
   winningWord: string;
   callingMode: CallingMode;
   hostParticipates: boolean;
+  markingMode?: MarkingMode;
 }
 
 export interface CallRecord {
@@ -165,6 +167,7 @@ export interface IRoomDocument extends Document {
   winningWord: string;
   callingMode: CallingMode;
   hostParticipates: boolean;
+  markingMode?: MarkingMode;
   players: string[]; // List of playerIds
   status: RoomStatus;
   turnOrder: string[];
@@ -196,6 +199,7 @@ export interface PublicRoom {
   winningWord: string;
   callingMode: CallingMode;
   hostParticipates: boolean;
+  markingMode?: MarkingMode;
   status: RoomStatus;
   allSubmitted: boolean;
   turnOrder: string[];
@@ -214,6 +218,7 @@ export interface CreateRoomInput {
   winningWord: string;
   callingMode: CallingMode;
   hostParticipates?: boolean;
+  markingMode?: MarkingMode;
   hostName: string;
 }
 

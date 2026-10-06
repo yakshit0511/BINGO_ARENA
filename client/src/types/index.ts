@@ -10,6 +10,7 @@ export interface ApiResponse<T = unknown> {
 }
 
 export type CallingMode = 'random' | 'turn-based';
+export type MarkingMode = 'auto' | 'manual';
 
 export interface GameConfig {
   gridSize: number; // N (e.g. 5 to 20)
@@ -17,6 +18,7 @@ export interface GameConfig {
   winningWord: string; // Exactly N letters, uppercase alphabetic
   callingMode: CallingMode;
   hostParticipates: boolean;
+  markingMode?: MarkingMode;
 }
 
 export interface Player {
@@ -120,6 +122,7 @@ export interface Room {
   config: GameConfig;
   players: Player[];
   status: RoomStatus;
+  markingMode?: MarkingMode;
   allSubmitted?: boolean;
   turnOrder?: string[];
   game?: GameState;

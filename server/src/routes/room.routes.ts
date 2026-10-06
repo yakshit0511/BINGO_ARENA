@@ -4,6 +4,8 @@ import {
   joinRoomHandler,
   getRoomHandler,
   leaveRoomHandler,
+  kickPlayerHandler,
+  updateMarkingModeHandler,
   submitBoardHandler,
   getBoardHandler,
   updateTurnOrderHandler,
@@ -30,6 +32,12 @@ router.get('/:roomCode', getRoomHandler);
 
 // POST /api/rooms/:roomCode/leave - Leave room
 router.post('/:roomCode/leave', leaveRoomHandler);
+
+// POST /api/rooms/:roomCode/kick - Kick player (Host only)
+router.post('/:roomCode/kick', kickPlayerHandler);
+
+// PATCH /api/rooms/:roomCode/marking-mode - Update marking mode (Host only)
+router.patch('/:roomCode/marking-mode', updateMarkingModeHandler);
 
 // POST /api/rooms/:roomCode/players/:playerId/board - Submit and lock board
 router.post('/:roomCode/players/:playerId/board', submitBoardHandler);

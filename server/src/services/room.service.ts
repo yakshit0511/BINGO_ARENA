@@ -205,6 +205,7 @@ export function formatPublicRoom(
     winningWord: room.winningWord,
     callingMode: room.callingMode,
     hostParticipates: room.hostParticipates,
+    markingMode: room.markingMode || 'auto',
     status: room.status,
     allSubmitted,
     turnOrder: room.turnOrder || [],
@@ -257,6 +258,7 @@ export const roomService = {
       winningWord: input.winningWord,
       callingMode: input.callingMode,
       hostParticipates: input.hostParticipates !== false,
+      markingMode: input.markingMode || 'auto',
       players: [hostPlayerId],
       status: 'waiting',
     });
@@ -529,6 +531,111 @@ export const roomService = {
       statusCode: 200,
       message: `Connection status updated to ${isConnected ? 'online' : 'offline'}`,
       data: publicRoom,
+    };
+  },
+
+  /**
+   * Host kicks/removes a player from the room.
+   */
+  async kickPlayer(
+    roomCode: string,
+    hostPlayerId: string,
+    targetPlayerId: string
+  ): Promise<ServiceResult<{ room: PublicRoom; kickedPlayerId: string; kickedPlayerName: string }>> {
+    const cleanCode = roomCode.trim().toUpperCase();
+
+    const room = await RoomModel.findOne({ roomCode: cleanCode });
+    if (!room) {
+      return { success: false, statusCode: 404, message: `Room "${cleanCode}" not found.` };
+    }
+
+    if (room.hostPlayerId !== hostPlayerId) {
+      return { success: false, statusCode: 403, message: 'Only the host can remove players.' };
+    }
+
+    if (targetPlayerId === room.hostPlayerId) {
+      return { success: false, statusCode: 400, message: 'Host cannot be removed from the room.' };
+    }
+
+    const player = await PlayerModel.findOne({ roomCode: cleanCode, playerId: targetPlayerId });
+    const playerName = player?.name || 'Player';
+
+    // Remove from room's players list and turnOrder
+    room.players = room.players.filter((id) => id !== targetPlayerId);
+    if (room.turnOrder) {
+      room.turnOrder = room.turnOrder.filter((id) => id !== targetPlayerId);
+    }
+
+    // Delete player from database
+    if (player) {
+      await PlayerModel.deleteOne({ roomCode: cleanCode, playerId: targetPlayerId });
+    }
+
+    // Fetch remaining players
+    const remainingPlayers = await PlayerModel.find({
+      roomCode: cleanCode,
+      playerId: { $in: room.players },
+    }).sort({ joinedAt: 1 });
+
+    // Re-evaluate if all submitted
+    const allSubmitted = remainingPlayers.length > 0 && remainingPlayers.every((p) => p.hasSubmitted);
+    if (allSubmitted && room.status === 'waiting') {
+      room.status = 'ready';
+    } else if (!allSubmitted && room.status === 'ready') {
+      room.status = 'waiting';
+    }
+    await room.save();
+
+    const hostPlayer = remainingPlayers.find((p) => p.playerId === room.hostPlayerId) || null;
+    const publicRoom = formatPublicRoom(room, remainingPlayers, hostPlayer);
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: `${playerName} has been removed by the host.`,
+      data: {
+        room: publicRoom,
+        kickedPlayerId: targetPlayerId,
+        kickedPlayerName: playerName,
+      },
+    };
+  },
+
+  /**
+   * Host updates room marking mode ('auto' | 'manual').
+   */
+  async updateMarkingMode(
+    roomCode: string,
+    hostPlayerId: string,
+    markingMode: 'auto' | 'manual'
+  ): Promise<ServiceResult<{ room: PublicRoom }>> {
+    const cleanCode = roomCode.trim().toUpperCase();
+
+    const room = await RoomModel.findOne({ roomCode: cleanCode });
+    if (!room) {
+      return { success: false, statusCode: 404, message: `Room "${cleanCode}" not found.` };
+    }
+
+    if (room.hostPlayerId !== hostPlayerId) {
+      return { success: false, statusCode: 403, message: 'Only the host can change room settings.' };
+    }
+
+    room.markingMode = markingMode === 'manual' ? 'manual' : 'auto';
+    await room.save();
+
+    const players = await PlayerModel.find({
+      roomCode: cleanCode,
+      playerId: { $in: room.players },
+    }).sort({ joinedAt: 1 });
+
+    const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
+    const publicRoom = formatPublicRoom(room, players, hostPlayer);
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: `Marking mode updated to ${room.markingMode}`,
+      data: { room: publicRoom },
     };
   },
 

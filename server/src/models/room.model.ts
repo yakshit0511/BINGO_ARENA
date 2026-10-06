@@ -204,6 +204,11 @@ const RoomSchema = new Schema<IRoomDocument>(
       type: Boolean,
       default: true,
     },
+    markingMode: {
+      type: String,
+      enum: ['auto', 'manual'],
+      default: 'auto',
+    },
     players: {
       type: [String],
       default: [],

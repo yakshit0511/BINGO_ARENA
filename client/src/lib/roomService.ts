@@ -71,6 +71,7 @@ export interface BackendPublicRoom {
   winningWord: string;
   callingMode: 'random' | 'turn-based';
   hostParticipates: boolean;
+  markingMode?: 'auto' | 'manual';
   status: RoomStatus;
   allSubmitted?: boolean;
   turnOrder?: string[];
@@ -124,9 +125,11 @@ export function mapBackendRoomToClient(backendRoom: BackendPublicRoom): Room {
       winningWord: backendRoom.winningWord,
       callingMode: backendRoom.callingMode,
       hostParticipates: backendRoom.hostParticipates,
+      markingMode: backendRoom.markingMode || 'auto',
     },
     players,
     status: backendRoom.status.toLowerCase() as RoomStatus,
+    markingMode: backendRoom.markingMode || 'auto',
     allSubmitted:
       backendRoom.allSubmitted ??
       (backendRoom.players.length > 0 && backendRoom.players.every((p) => p.hasSubmitted)),
@@ -793,6 +796,71 @@ export const roomService = {
         success: false,
         message: error instanceof Error ? error.message : 'Unable to connect to server.',
       };
+    }
+  },
+
+  /**
+   * Host removes a player from the room.
+   */
+  async kickPlayer(
+    roomCode: string,
+    hostPlayerId: string,
+    targetPlayerId: string
+  ): Promise<ApiResponse<{ room: Room; kickedPlayerId: string }>> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/rooms/${roomCode.trim().toUpperCase()}/kick`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hostPlayerId: hostPlayerId.trim(), targetPlayerId: targetPlayerId.trim() }),
+      });
+
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        return { success: false, message: json.message || 'Failed to remove player.' };
+      }
+
+      const clientRoom = mapBackendRoomToClient(json.data.room);
+      return {
+        success: true,
+        message: json.message,
+        data: {
+          room: clientRoom,
+          kickedPlayerId: json.data.kickedPlayerId,
+        },
+      };
+    } catch {
+      return { success: false, message: 'Network error while removing player.' };
+    }
+  },
+
+  /**
+   * Host updates room marking mode ('auto' | 'manual').
+   */
+  async updateMarkingMode(
+    roomCode: string,
+    hostPlayerId: string,
+    markingMode: 'auto' | 'manual'
+  ): Promise<ApiResponse<{ room: Room }>> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/rooms/${roomCode.trim().toUpperCase()}/marking-mode`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hostPlayerId: hostPlayerId.trim(), markingMode }),
+      });
+
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        return { success: false, message: json.message || 'Failed to update marking mode.' };
+      }
+
+      const clientRoom = mapBackendRoomToClient(json.data.room);
+      return {
+        success: true,
+        message: json.message,
+        data: { room: clientRoom },
+      };
+    } catch {
+      return { success: false, message: 'Network error while updating marking mode.' };
     }
   },
 
