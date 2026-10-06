@@ -34,15 +34,25 @@ export interface Player {
 export type RoomStatus = 'waiting' | 'ready' | 'playing' | 'finished';
 export type GameStatus = 'waiting' | 'ready' | 'active' | 'won' | 'ended';
 
+export interface CallRecord {
+  number: number;
+  playerId: string;
+  playerName: string;
+  calledAt: string;
+}
+
 export interface GameState {
   status: GameStatus;
   startedAt: string | null;
   playerOrder: string[];
   currentTurnIndex: number;
   currentPlayerId: string | null;
+  currentNumber: number | null;
+  currentCallerName: string | null;
   turnNumber: number;
   calledNumbers: number[];
-  lastCalledNumbers: number[];
+  callHistory?: CallRecord[];
+  lastCalledNumbers: CallRecord[];
   winnerId: string | null;
   winningWord: string;
   completedLetters: number;

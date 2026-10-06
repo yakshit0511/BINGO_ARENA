@@ -380,3 +380,87 @@ export async function advanceTurnHandler(req: Request, res: Response): Promise<v
     });
   }
 }
+
+/**
+ * POST /api/rooms/:roomCode/game/call-number
+ * Calls a number in the active game.
+ */
+export async function callNumberHandler(req: Request, res: Response): Promise<void> {
+  const roomCode = String(req.params.roomCode || '').trim().toUpperCase();
+  const playerId = String(req.body.playerId || '').trim();
+  const number = req.body.number;
+
+  if (!roomCode || !playerId) {
+    res.status(400).json({
+      success: false,
+      message: 'Room code and player ID are required.',
+    });
+    return;
+  }
+
+  try {
+    const result = await roomService.callNumber(roomCode, playerId, number);
+
+    if (result.success && result.data) {
+      const io: Server | undefined = req.app.get('io');
+      if (io) {
+        io.to(`room:${roomCode}`).emit('game:number:called', result.data);
+        io.to(`room:${roomCode}`).emit('game:state', result.data.game);
+        io.to(`room:${roomCode}`).emit('room:state', result.data.room);
+      }
+    }
+
+    res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error in callNumberHandler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error calling number.',
+    });
+  }
+}
+
+/**
+ * POST /api/rooms/:roomCode/game/call-random
+ * Random calling engine foundation.
+ */
+export async function callRandomNumberHandler(req: Request, res: Response): Promise<void> {
+  const roomCode = String(req.params.roomCode || '').trim().toUpperCase();
+
+  if (!roomCode) {
+    res.status(400).json({
+      success: false,
+      message: 'Room code is required.',
+    });
+    return;
+  }
+
+  try {
+    const result = await roomService.callRandomNumber(roomCode);
+
+    if (result.success && result.data) {
+      const io: Server | undefined = req.app.get('io');
+      if (io) {
+        io.to(`room:${roomCode}`).emit('game:number:called', result.data);
+        io.to(`room:${roomCode}`).emit('game:state', result.data.game);
+        io.to(`room:${roomCode}`).emit('room:state', result.data.room);
+      }
+    }
+
+    res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error in callRandomNumberHandler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error calling random number.',
+    });
+  }
+}

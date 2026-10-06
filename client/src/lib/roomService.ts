@@ -1,4 +1,4 @@
-import { ApiResponse, GameConfig, Room, Player, RoomStatus } from '../types';
+import { ApiResponse, GameConfig, Room, Player, RoomStatus, GameState } from '../types';
 import { API_BASE_URL } from '../constants';
 
 const STORAGE_KEY = 'bingo_arena_current_room';
@@ -15,15 +15,25 @@ export interface BackendPublicPlayer {
   joinedAt: string;
 }
 
+export interface BackendPublicCallRecord {
+  number: number;
+  playerId: string;
+  playerName: string;
+  calledAt: string;
+}
+
 export interface BackendPublicGameState {
   status: 'waiting' | 'ready' | 'active' | 'won' | 'ended';
   startedAt: string | null;
   playerOrder: string[];
   currentTurnIndex: number;
   currentPlayerId: string | null;
+  currentNumber: number | null;
+  currentCallerName: string | null;
   turnNumber: number;
   calledNumbers: number[];
-  lastCalledNumbers: number[];
+  callHistory?: BackendPublicCallRecord[];
+  lastCalledNumbers: BackendPublicCallRecord[];
   winnerId: string | null;
   winningWord: string;
   completedLetters: number;
@@ -103,8 +113,11 @@ export function mapBackendRoomToClient(backendRoom: BackendPublicRoom): Room {
           playerOrder: backendRoom.game.playerOrder || [],
           currentTurnIndex: backendRoom.game.currentTurnIndex || 0,
           currentPlayerId: backendRoom.game.currentPlayerId || null,
+          currentNumber: backendRoom.game.currentNumber ?? null,
+          currentCallerName: backendRoom.game.currentCallerName ?? null,
           turnNumber: backendRoom.game.turnNumber || 0,
           calledNumbers: backendRoom.game.calledNumbers || [],
+          callHistory: backendRoom.game.callHistory || [],
           lastCalledNumbers: backendRoom.game.lastCalledNumbers || [],
           winnerId: backendRoom.game.winnerId || null,
           winningWord: backendRoom.game.winningWord || backendRoom.winningWord,
@@ -498,6 +511,68 @@ export const roomService = {
         data: {
           room: clientRoom,
           game: json.data.game,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unable to connect to server.',
+      };
+    }
+  },
+
+  /**
+   * Authoritative Number Calling API (POST /api/rooms/:roomCode/game/call-number)
+   */
+  async callNumber(
+    roomCode: string,
+    playerId: string,
+    number: number
+  ): Promise<
+    ApiResponse<{
+      room: Room;
+      game: GameState;
+      calledNumber: number;
+    }>
+  > {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/rooms/${roomCode.trim().toUpperCase()}/game/call-number`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            playerId: playerId.trim(),
+            number,
+          }),
+        }
+      );
+
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        return {
+          success: false,
+          message: json.message || 'Failed to call number on server.',
+        };
+      }
+
+      const clientRoom = mapBackendRoomToClient(json.data.room);
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(clientRoom));
+      } catch {
+        // Storage unavailable
+      }
+
+      return {
+        success: true,
+        message: json.message || 'Number called successfully',
+        data: {
+          room: clientRoom,
+          game: json.data.game,
+          calledNumber: json.data.calledNumber,
         },
       };
     } catch (error) {

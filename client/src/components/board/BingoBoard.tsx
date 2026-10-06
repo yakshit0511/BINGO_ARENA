@@ -1,12 +1,14 @@
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Lock } from 'lucide-react';
 
 interface BingoBoardProps {
   gridSize: number;
   cells: (number | null)[];
-  onCellClick: (index: number) => void;
-  nextNumber: number | null;
+  onCellClick?: (index: number) => void;
+  nextNumber?: number | null;
   isLocked: boolean;
+  calledNumbers?: number[];
   className?: string;
 }
 
@@ -16,8 +18,12 @@ export function BingoBoard({
   onCellClick,
   nextNumber,
   isLocked,
+  calledNumbers,
   className = '',
 }: BingoBoardProps) {
+  // Efficient Set-based lookup for called numbers
+  const calledSet = useMemo(() => new Set(calledNumbers || []), [calledNumbers]);
+
   // Determine dynamic cell dimension classes based on grid size
   const getCellDimensions = () => {
     if (gridSize <= 5) {
@@ -53,7 +59,8 @@ export function BingoBoard({
         >
           {cells.map((value, index) => {
             const isFilled = value !== null;
-            const canClick = !isFilled && !isLocked && nextNumber !== null;
+            const isCalled = isFilled && calledSet.has(value);
+            const canClick = !isFilled && !isLocked && nextNumber !== null && typeof onCellClick === 'function';
 
             return (
               <button
@@ -61,7 +68,7 @@ export function BingoBoard({
                 type="button"
                 disabled={!canClick}
                 onClick={() => {
-                  if (canClick) {
+                  if (canClick && onCellClick) {
                     onCellClick(index);
                   }
                 }}
@@ -69,7 +76,9 @@ export function BingoBoard({
                   group relative flex items-center justify-center font-mono font-black rounded-lg sm:rounded-xl transition-all duration-150 touch-manipulation
                   ${cellDimClass}
                   ${
-                    isFilled
+                    isCalled
+                      ? 'bg-gradient-to-br from-amber-400 via-arcade-gold to-yellow-500 border-2 border-yellow-200 text-slate-950 font-black shadow-[0_0_20px_rgba(251,191,36,0.65)] scale-[1.03] z-10 cursor-default'
+                      : isFilled
                       ? 'bg-gradient-to-br from-arcade-purple via-fuchsia-900 to-slate-900 border-2 border-fuchsia-400/60 text-white shadow-[0_0_12px_rgba(217,70,239,0.3)] cursor-default'
                       : isLocked
                       ? 'bg-arcade-surface/40 border border-arcade-border/40 text-arcade-muted/30 cursor-not-allowed'
@@ -79,14 +88,19 @@ export function BingoBoard({
               >
                 {/* Number Content */}
                 {isFilled ? (
-                  <motion.span
-                    initial={{ scale: 0.65, opacity: 0 }}
+                  <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                    className="drop-shadow-md select-none"
+                    className="relative flex items-center justify-center"
                   >
-                    {value}
-                  </motion.span>
+                    <span className="drop-shadow-md select-none">{value}</span>
+                    {isCalled && (
+                      <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-100 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-300" />
+                      </span>
+                    )}
+                  </motion.div>
                 ) : (
                   <>
                     {/* Ghost preview of next number on desktop hover */}

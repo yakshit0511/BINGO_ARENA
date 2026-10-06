@@ -1,6 +1,16 @@
 import { Schema, model } from 'mongoose';
 import { IRoomDocument } from '../types';
 
+const CallRecordSchema = new Schema(
+  {
+    number: { type: Number, required: true },
+    playerId: { type: String, required: true },
+    playerName: { type: String, required: true },
+    calledAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const GameStateSchema = new Schema(
   {
     status: {
@@ -24,6 +34,14 @@ const GameStateSchema = new Schema(
       type: String,
       default: null,
     },
+    currentNumber: {
+      type: Number,
+      default: null,
+    },
+    currentCallerName: {
+      type: String,
+      default: null,
+    },
     turnNumber: {
       type: Number,
       default: 0,
@@ -32,8 +50,12 @@ const GameStateSchema = new Schema(
       type: [Number],
       default: [],
     },
+    callHistory: {
+      type: [CallRecordSchema],
+      default: [],
+    },
     lastCalledNumbers: {
-      type: [Number],
+      type: [CallRecordSchema],
       default: [],
     },
     winnerId: {

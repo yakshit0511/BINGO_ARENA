@@ -143,28 +143,33 @@ class SoundManager {
   }
 
   /**
-   * Number called tone
+   * Number called tone - rich arcade double-harmonic chime
    */
   public playNumberCall(): void {
     const ctx = this.getAudioContext();
     if (!ctx) return;
 
     try {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+      // Fundamental + overtone
+      [659.25, 1318.51].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
 
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(740, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(370, ctx.currentTime + 0.1);
+        osc.type = i === 0 ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime(freq, now);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.05, now + 0.12);
 
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+        const volume = i === 0 ? 0.12 : 0.06;
+        gain.gain.setValueAtTime(volume, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
 
-      osc.start();
-      osc.stop(ctx.currentTime + 0.11);
+        osc.start(now);
+        osc.stop(now + 0.3);
+      });
     } catch {
       // Ignored
     }

@@ -30,8 +30,11 @@ export function formatPublicGameState(game?: IGameState): PublicGameState {
       playerOrder: [],
       currentTurnIndex: 0,
       currentPlayerId: null,
+      currentNumber: null,
+      currentCallerName: null,
       turnNumber: 0,
       calledNumbers: [],
+      callHistory: [],
       lastCalledNumbers: [],
       winnerId: null,
       winningWord: '',
@@ -40,15 +43,36 @@ export function formatPublicGameState(game?: IGameState): PublicGameState {
     };
   }
 
+  const formatRecord = (r: unknown) => {
+    const rec = r as { number?: number; playerId?: string; playerName?: string; calledAt?: Date | string };
+    if (!rec || typeof rec.number !== 'number') {
+      return {
+        number: Number(r) || 0,
+        playerId: '',
+        playerName: 'Contender',
+        calledAt: new Date().toISOString(),
+      };
+    }
+    return {
+      number: rec.number,
+      playerId: rec.playerId || '',
+      playerName: rec.playerName || 'Contender',
+      calledAt: rec.calledAt ? (rec.calledAt instanceof Date ? rec.calledAt.toISOString() : String(rec.calledAt)) : new Date().toISOString(),
+    };
+  };
+
   return {
     status: game.status || 'waiting',
     startedAt: game.startedAt ? game.startedAt.toISOString() : null,
     playerOrder: game.playerOrder || [],
     currentTurnIndex: game.currentTurnIndex || 0,
     currentPlayerId: game.currentPlayerId || null,
+    currentNumber: game.currentNumber ?? null,
+    currentCallerName: game.currentCallerName ?? null,
     turnNumber: game.turnNumber || 0,
     calledNumbers: game.calledNumbers || [],
-    lastCalledNumbers: game.lastCalledNumbers || [],
+    callHistory: Array.isArray(game.callHistory) ? game.callHistory.map(formatRecord) : [],
+    lastCalledNumbers: Array.isArray(game.lastCalledNumbers) ? game.lastCalledNumbers.map(formatRecord) : [],
     winnerId: game.winnerId || null,
     winningWord: game.winningWord || '',
     completedLetters: game.completedLetters || 0,
@@ -701,8 +725,11 @@ export const roomService = {
       playerOrder: finalOrder,
       currentTurnIndex: 0,
       currentPlayerId: finalOrder[0],
+      currentNumber: null,
+      currentCallerName: null,
       turnNumber: 1,
       calledNumbers: [],
+      callHistory: [],
       lastCalledNumbers: [],
       winnerId: null,
       winningWord: room.winningWord,
@@ -794,5 +821,240 @@ export const roomService = {
         game: publicRoom.game,
       },
     };
+  },
+
+  /**
+   * Authoritatively calls a number in an active Bingo game.
+   * Atomic concurrency protection, validation, history logging, and turn advancement.
+   */
+  async callNumber(
+    roomCode: string,
+    requesterPlayerId: string,
+    rawNumber: unknown
+  ): Promise<
+    ServiceResult<{
+      room: PublicRoom;
+      game: PublicGameState;
+      calledNumber: number;
+      callRecord: {
+        number: number;
+        playerId: string;
+        playerName: string;
+        calledAt: string;
+      };
+    }>
+  > {
+    const cleanCode = roomCode.trim().toUpperCase();
+    const cleanPlayerId = requesterPlayerId.trim();
+
+    // 1. Validate number input
+    const num = Number(rawNumber);
+    if (!Number.isInteger(num)) {
+      return { success: false, statusCode: 400, message: 'Invalid number. Must be an integer.' };
+    }
+
+    // 2. Room lookup
+    const room = await RoomModel.findOne({ roomCode: cleanCode });
+    if (!room) {
+      return { success: false, statusCode: 404, message: 'Game not found.' };
+    }
+
+    // 3. Active game checks
+    if (!room.game) {
+      return { success: false, statusCode: 400, message: 'Game has not started.' };
+    }
+
+    if (room.game.status === 'won' || room.game.status === 'ended') {
+      return { success: false, statusCode: 400, message: 'Game has already ended.' };
+    }
+
+    if (room.game.status !== 'active') {
+      return { success: false, statusCode: 400, message: 'Game has not started.' };
+    }
+
+    // 4. Participant verification
+    const isParticipant =
+      room.players.includes(cleanPlayerId) &&
+      Array.isArray(room.game.gamePlayers) &&
+      room.game.gamePlayers.includes(cleanPlayerId);
+
+    if (!isParticipant) {
+      return {
+        success: false,
+        statusCode: 403,
+        message: 'You are not a participant in this active game.',
+      };
+    }
+
+    // 5. Current player turn check
+    if (room.game.currentPlayerId !== cleanPlayerId) {
+      return {
+        success: false,
+        statusCode: 403,
+        message: 'It is not your turn.',
+      };
+    }
+
+    // 6. Number range validation (1 to N^2)
+    const maxNumber = room.gridSize * room.gridSize;
+    if (num < 1 || num > maxNumber) {
+      return {
+        success: false,
+        statusCode: 400,
+        message: `Number must be between 1 and ${maxNumber}.`,
+      };
+    }
+
+    // 7. Uniqueness validation (check already called numbers)
+    if (room.game.calledNumbers.includes(num)) {
+      return {
+        success: false,
+        statusCode: 400,
+        message: 'That number has already been called.',
+      };
+    }
+
+    // 8. Caller metadata lookup
+    const caller = await PlayerModel.findOne({ roomCode: cleanCode, playerId: cleanPlayerId });
+    const callerName = caller ? caller.name : 'Contender';
+
+    const now = new Date();
+    const callRecord = {
+      number: num,
+      playerId: cleanPlayerId,
+      playerName: callerName,
+      calledAt: now,
+    };
+
+    // 9. Turn progression calculation
+    const frozenOrder =
+      room.game.playerOrder && room.game.playerOrder.length > 0
+        ? room.game.playerOrder
+        : room.game.gamePlayers;
+
+    const nextIndex = (room.game.currentTurnIndex + 1) % frozenOrder.length;
+    const nextPlayerId = frozenOrder[nextIndex];
+    const nextTurnNumber = (room.game.turnNumber || 1) + 1;
+
+    // 10. Compute updated last 5 calls (newest first)
+    const existingLastCalls = Array.isArray(room.game.lastCalledNumbers)
+      ? room.game.lastCalledNumbers
+      : [];
+    const updatedLastCalls = [callRecord, ...existingLastCalls].slice(0, 5);
+
+    // 11. Atomic update to guarantee concurrency protection & prevent duplicate calls
+    const updatedRoom = await RoomModel.findOneAndUpdate(
+      {
+        roomCode: cleanCode,
+        'game.status': 'active',
+        'game.currentPlayerId': cleanPlayerId,
+        'game.calledNumbers': { $ne: num },
+      },
+      {
+        $push: {
+          'game.calledNumbers': num,
+          'game.callHistory': callRecord,
+        },
+        $set: {
+          'game.currentNumber': num,
+          'game.currentCallerName': callerName,
+          'game.currentTurnIndex': nextIndex,
+          'game.currentPlayerId': nextPlayerId,
+          'game.turnNumber': nextTurnNumber,
+          'game.lastCalledNumbers': updatedLastCalls,
+        },
+      },
+      { new: true }
+    );
+
+    if (!updatedRoom) {
+      // Re-query to determine reason for rejection
+      const freshRoom = await RoomModel.findOne({ roomCode: cleanCode });
+      if (!freshRoom || !freshRoom.game) {
+        return { success: false, statusCode: 404, message: 'Game not found.' };
+      }
+      if (freshRoom.game.status !== 'active') {
+        return { success: false, statusCode: 400, message: 'Game has already ended.' };
+      }
+      if (freshRoom.game.calledNumbers.includes(num)) {
+        return { success: false, statusCode: 400, message: 'That number has already been called.' };
+      }
+      if (freshRoom.game.currentPlayerId !== cleanPlayerId) {
+        return { success: false, statusCode: 403, message: 'It is not your turn.' };
+      }
+      return { success: false, statusCode: 409, message: 'Concurrent call conflict. Please retry.' };
+    }
+
+    // 12. Fetch all players and format public DTOs
+    const players = await PlayerModel.find({
+      roomCode: cleanCode,
+      playerId: { $in: updatedRoom.players },
+    }).sort({ joinedAt: 1 });
+
+    const hostPlayer = players.find((p) => p.playerId === updatedRoom.hostPlayerId) || null;
+    const publicRoom = formatPublicRoom(updatedRoom, players, hostPlayer);
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Number called successfully.',
+      data: {
+        room: publicRoom,
+        game: publicRoom.game,
+        calledNumber: num,
+        callRecord: {
+          number: num,
+          playerId: cleanPlayerId,
+          playerName: callerName,
+          calledAt: now.toISOString(),
+        },
+      },
+    };
+  },
+
+  /**
+   * Random Calling Engine Foundation:
+   * Selects an unused number from 1..N^2 without repeats.
+   */
+  async callRandomNumber(
+    roomCode: string
+  ): Promise<
+    ServiceResult<{
+      room: PublicRoom;
+      game: PublicGameState;
+      calledNumber: number;
+      callRecord: {
+        number: number;
+        playerId: string;
+        playerName: string;
+        calledAt: string;
+      };
+    }>
+  > {
+    const cleanCode = roomCode.trim().toUpperCase();
+    const room = await RoomModel.findOne({ roomCode: cleanCode });
+    if (!room || !room.game || room.game.status !== 'active') {
+      return { success: false, statusCode: 400, message: 'Game is not active.' };
+    }
+
+    const maxNumber = room.gridSize * room.gridSize;
+    const calledSet = new Set(room.game.calledNumbers || []);
+    const availableNumbers: number[] = [];
+
+    for (let i = 1; i <= maxNumber; i++) {
+      if (!calledSet.has(i)) {
+        availableNumbers.push(i);
+      }
+    }
+
+    if (availableNumbers.length === 0) {
+      return { success: false, statusCode: 400, message: 'All numbers have already been called.' };
+    }
+
+    const randomIndex = Math.floor(Math.random() * availableNumbers.length);
+    const pickedNumber = availableNumbers[randomIndex];
+    const callerId = room.game.currentPlayerId || room.hostPlayerId;
+
+    return this.callNumber(cleanCode, callerId, pickedNumber);
   },
 };

@@ -19,15 +19,32 @@ export interface GameConfig {
   hostParticipates: boolean;
 }
 
+export interface CallRecord {
+  number: number;
+  playerId: string;
+  playerName: string;
+  calledAt: Date;
+}
+
+export interface PublicCallRecord {
+  number: number;
+  playerId: string;
+  playerName: string;
+  calledAt: string;
+}
+
 export interface IGameState {
   status: GameStatus;
   startedAt: Date | null;
   playerOrder: string[];
   currentTurnIndex: number;
   currentPlayerId: string | null;
+  currentNumber: number | null;
+  currentCallerName: string | null;
   turnNumber: number;
   calledNumbers: number[];
-  lastCalledNumbers: number[];
+  callHistory: CallRecord[];
+  lastCalledNumbers: CallRecord[];
   winnerId: string | null;
   winningWord: string;
   completedLetters: number;
@@ -40,9 +57,12 @@ export interface PublicGameState {
   playerOrder: string[];
   currentTurnIndex: number;
   currentPlayerId: string | null;
+  currentNumber: number | null;
+  currentCallerName: string | null;
   turnNumber: number;
   calledNumbers: number[];
-  lastCalledNumbers: number[];
+  callHistory: PublicCallRecord[];
+  lastCalledNumbers: PublicCallRecord[];
   winnerId: string | null;
   winningWord: string;
   completedLetters: number;

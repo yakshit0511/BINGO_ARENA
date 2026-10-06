@@ -391,6 +391,120 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
   );
 
   /**
+   * Event: game:number:call
+   * Authoritative number call event.
+   */
+  socket.on(
+    'game:number:call',
+    async (
+      payload: { roomCode: string; number: number; playerId?: string },
+      callback?: AckCallback
+    ) => {
+      try {
+        if (!payload || typeof payload !== 'object') {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: 'Invalid payload.' });
+          }
+          return;
+        }
+
+        const roomCode = String(payload.roomCode || socket.data?.roomCode || '')
+          .trim()
+          .toUpperCase();
+        // Server authoritative: prioritize authenticated socket session
+        const requestingPlayerId =
+          socket.data?.playerId || (payload.playerId ? String(payload.playerId).trim() : '');
+
+        if (!roomCode || !requestingPlayerId) {
+          socket.emit('game:error', { message: 'Identification failed. Please rejoin room.' });
+          if (typeof callback === 'function') {
+            callback({ success: false, message: 'Identification failed.' });
+          }
+          return;
+        }
+
+        const result = await roomService.callNumber(roomCode, requestingPlayerId, payload.number);
+
+        if (!result.success || !result.data) {
+          socket.emit('game:error', { message: result.message });
+          if (typeof callback === 'function') {
+            callback({ success: false, message: result.message });
+          }
+          return;
+        }
+
+        const socketRoomName = getSocketRoomName(roomCode);
+        io.to(socketRoomName).emit('game:number:called', result.data);
+        io.to(socketRoomName).emit('game:state', result.data.game);
+        io.to(socketRoomName).emit('room:state', result.data.room);
+
+        console.log(
+          `[Socket.IO] Number ${result.data.calledNumber} called by ${requestingPlayerId} in room ${roomCode}`
+        );
+
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            message: 'Number called successfully',
+            room: result.data.room,
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.IO] Error in game:number:call:', error);
+        socket.emit('game:error', { message: 'Internal server error calling number.' });
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Internal server error calling number.' });
+        }
+      }
+    }
+  );
+
+  /**
+   * Event: game:request-state
+   * State synchronization upon refresh/reconnect.
+   */
+  socket.on(
+    'game:request-state',
+    async (payload: { roomCode: string }, callback?: AckCallback) => {
+      try {
+        const roomCode = String(payload?.roomCode || socket.data?.roomCode || '')
+          .trim()
+          .toUpperCase();
+        if (!roomCode) {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: 'Room code is required.' });
+          }
+          return;
+        }
+
+        const result = await roomService.getRoom(roomCode);
+        if (!result.success || !result.data) {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: result.message });
+          }
+          return;
+        }
+
+        socket.emit('game:state', result.data.game);
+        socket.emit('room:state', result.data);
+
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            message: 'State synchronized',
+            room: result.data,
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.IO] Error in game:request-state:', error);
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Internal server error requesting state.' });
+        }
+      }
+    }
+  );
+
+  /**
    * Event: disconnecting
    * Handles unexpected network drop, tab closure, or browser refresh.
    */

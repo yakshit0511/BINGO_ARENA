@@ -196,6 +196,60 @@ export function startGameSocket(
 }
 
 /**
+ * Emit authoritative number-calling request via Socket.IO
+ */
+export function callNumberSocket(
+  roomCode: string,
+  playerId: string,
+  number: number
+): Promise<{ success: boolean; message?: string; game?: unknown; room?: unknown }> {
+  const socket = getSocket();
+
+  return new Promise((resolve) => {
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    const payload = {
+      roomCode: roomCode.trim().toUpperCase(),
+      playerId: playerId.trim(),
+      number,
+    };
+
+    socket.emit(
+      'game:number:call',
+      payload,
+      (res: { success: boolean; message?: string; game?: unknown; room?: unknown }) => {
+        resolve(res || { success: false, message: 'No response from server.' });
+      }
+    );
+  });
+}
+
+/**
+ * Request latest authoritative game and room state (refresh/reconnect sync)
+ */
+export function requestGameStateSocket(
+  roomCode: string
+): Promise<{ success: boolean; message?: string; game?: unknown; room?: unknown }> {
+  const socket = getSocket();
+
+  return new Promise((resolve) => {
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    socket.emit(
+      'game:request-state',
+      { roomCode: roomCode.trim().toUpperCase() },
+      (res: { success: boolean; message?: string; game?: unknown; room?: unknown }) => {
+        resolve(res || { success: false, message: 'No response from server.' });
+      }
+    );
+  });
+}
+
+/**
  * Disconnect and release the socket.
  */
 export function disconnectSocket(): void {

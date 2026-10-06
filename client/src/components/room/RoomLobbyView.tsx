@@ -130,7 +130,15 @@ export function RoomLobbyView({
       }
     };
 
-    // 7. Game error listener
+    // 7. Number called listener
+    const handleNumberCalled = (data: { room?: BackendPublicRoom }) => {
+      soundManager.playNumberCall();
+      if (data?.room && data.room.roomCode === room.roomCode) {
+        setRoom(mapBackendRoomToClient(data.room));
+      }
+    };
+
+    // 8. Game error listener
     const handleGameError = (data: { message?: string }) => {
       if (data?.message) {
         setStartError(data.message);
@@ -142,6 +150,7 @@ export function RoomLobbyView({
     socket.on('room:turn-order:updated', handleTurnOrderUpdated);
     socket.on('game:started', handleGameStarted);
     socket.on('game:state', handleGameState);
+    socket.on('game:number:called', handleNumberCalled);
     socket.on('game:error', handleGameError);
 
     // Initial socket join attempt
@@ -158,6 +167,7 @@ export function RoomLobbyView({
       socket.off('room:turn-order:updated', handleTurnOrderUpdated);
       socket.off('game:started', handleGameStarted);
       socket.off('game:state', handleGameState);
+      socket.off('game:number:called', handleNumberCalled);
       socket.off('game:error', handleGameError);
     };
   }, [room.roomCode, currentPlayer.id]);

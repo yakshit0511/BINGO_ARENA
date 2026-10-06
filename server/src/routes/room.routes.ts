@@ -9,6 +9,8 @@ import {
   updateTurnOrderHandler,
   startGameHandler,
   advanceTurnHandler,
+  callNumberHandler,
+  callRandomNumberHandler,
 } from '../controllers/room.controller';
 
 const router = Router();
@@ -36,6 +38,12 @@ router.put('/:roomCode/turn-order', updateTurnOrderHandler);
 
 // POST /api/rooms/:roomCode/game/start - Start game authoritatively (Host only)
 router.post('/:roomCode/game/start', startGameHandler);
+
+// POST /api/rooms/:roomCode/game/call-number - Call a number (Current player only)
+router.post('/:roomCode/game/call-number', callNumberHandler);
+
+// POST /api/rooms/:roomCode/game/call-random - Call a random unused number (Random mode)
+router.post('/:roomCode/game/call-random', callRandomNumberHandler);
 
 // POST /api/rooms/:roomCode/game/advance-turn - Advance turn (Foundation helper)
 router.post('/:roomCode/game/advance-turn', advanceTurnHandler);

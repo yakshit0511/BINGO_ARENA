@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Volume2,
   VolumeX,
@@ -11,11 +11,24 @@ import {
   Trophy,
   Users,
   Home,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { Room, Player, GameState } from '../../types';
 import { BingoBoard } from '../board/BingoBoard';
 import { soundManager } from '../../lib/sound';
 import { TiltCard } from '../ui/TiltCard';
+import { NumberCallerGrid } from './NumberCallerGrid';
+import { CurrentNumberBall } from './CurrentNumberBall';
+import { RecentCallsList } from './RecentCallsList';
+import {
+  getSocket,
+  onSocketStatusChange,
+  callNumberSocket,
+  requestGameStateSocket,
+  joinRoomSocket,
+} from '../../lib/socket';
+import { mapBackendRoomToClient, BackendPublicRoom } from '../../lib/roomService';
 
 interface ActiveGameViewProps {
   room: Room;
@@ -23,10 +36,19 @@ interface ActiveGameViewProps {
   onExit?: () => void;
 }
 
-export function ActiveGameView({ room, currentPlayer, onExit }: ActiveGameViewProps) {
+export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: ActiveGameViewProps) {
+  const [room, setRoom] = useState<Room>(initialRoom);
   const [isSoundOn, setIsSoundOn] = useState(() => soundManager.isSoundEnabled());
-  const game: GameState | undefined = room.game;
+  const [isCallingNumber, setIsCallingNumber] = useState(false);
+  const [callingNumberVal, setCallingNumberVal] = useState<number | null>(null);
+  const [callError, setCallError] = useState<string | null>(null);
 
+  // Sync prop changes
+  useEffect(() => {
+    setRoom(initialRoom);
+  }, [initialRoom]);
+
+  const game: GameState | undefined = room.game;
   const gridSize = room.config.gridSize;
   const playerBoard = currentPlayer.board || [];
 
@@ -35,22 +57,120 @@ export function ActiveGameView({ room, currentPlayer, onExit }: ActiveGameViewPr
   const currentTurnPlayer = room.players.find((p) => p.id === currentTurnPlayerId);
   const isMyTurn = currentTurnPlayerId === currentPlayer.id;
 
+  // Track previous turn to trigger audio chimes on turn transition
+  const prevIsMyTurnRef = useRef<boolean>(isMyTurn);
+
   // Determine next player in rotation
-  const playerOrder = game?.playerOrder && game.playerOrder.length > 0
-    ? game.playerOrder
-    : room.players.map((p) => p.id);
+  const playerOrder =
+    game?.playerOrder && game.playerOrder.length > 0
+      ? game.playerOrder
+      : room.players.map((p) => p.id);
 
   const currentIndex = game?.currentTurnIndex ?? 0;
-  const nextIndex = (currentIndex + 1) % playerOrder.length;
+  const nextIndex = playerOrder.length > 0 ? (currentIndex + 1) % playerOrder.length : 0;
   const nextPlayerId = playerOrder[nextIndex];
   const nextPlayer = room.players.find((p) => p.id === nextPlayerId);
 
-  // Play sound when turn becomes active
+  // Play turn chime when your turn activates
   useEffect(() => {
-    if (isMyTurn) {
+    if (isMyTurn && !prevIsMyTurnRef.current) {
       soundManager.playTurnStart();
     }
-  }, [isMyTurn, currentIndex]);
+    prevIsMyTurnRef.current = isMyTurn;
+  }, [isMyTurn]);
+
+  // Real-time Socket.IO subscriptions for authoritative game engine events
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleRoomState = (rawRoom: BackendPublicRoom) => {
+      if (rawRoom && rawRoom.roomCode === room.roomCode) {
+        setRoom(mapBackendRoomToClient(rawRoom));
+      }
+    };
+
+    const handleGameState = (rawRoom: BackendPublicRoom) => {
+      if (rawRoom && rawRoom.roomCode === room.roomCode) {
+        setRoom(mapBackendRoomToClient(rawRoom));
+      }
+    };
+
+    const handleNumberCalled = (data: { room?: BackendPublicRoom; number?: number }) => {
+      soundManager.playNumberCall();
+      if (data?.room && data.room.roomCode === room.roomCode) {
+        setRoom(mapBackendRoomToClient(data.room));
+      }
+      setIsCallingNumber(false);
+      setCallingNumberVal(null);
+    };
+
+    const handleGameError = (data: { message?: string }) => {
+      if (data?.message) {
+        setCallError(data.message);
+      }
+      setIsCallingNumber(false);
+      setCallingNumberVal(null);
+    };
+
+    const unsubStatus = onSocketStatusChange((status) => {
+      if (status === 'CONNECTED') {
+        // Re-sync authoritative room and game state on reconnect
+        joinRoomSocket(room.roomCode, currentPlayer.id).then((res) => {
+          if (res.success && res.room) {
+            setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
+          }
+        });
+        requestGameStateSocket(room.roomCode).then((res) => {
+          if (res.success && res.room) {
+            setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
+          }
+        });
+      }
+    });
+
+    socket.on('room:state', handleRoomState);
+    socket.on('game:state', handleGameState);
+    socket.on('game:number:called', handleNumberCalled);
+    socket.on('game:error', handleGameError);
+
+    return () => {
+      unsubStatus();
+      socket.off('room:state', handleRoomState);
+      socket.off('game:state', handleGameState);
+      socket.off('game:number:called', handleNumberCalled);
+      socket.off('game:error', handleGameError);
+    };
+  }, [room.roomCode, currentPlayer.id]);
+
+  // Handler for caller selecting a number from the grid
+  const handleCallNumber = async (num: number) => {
+    if (!isMyTurn || isCallingNumber) return;
+
+    setIsCallingNumber(true);
+    setCallingNumberVal(num);
+    setCallError(null);
+
+    try {
+      const res = await callNumberSocket(room.roomCode, currentPlayer.id, num);
+      if (!res.success) {
+        setCallError(res.message || 'Failed to call number.');
+        setIsCallingNumber(false);
+        setCallingNumberVal(null);
+      } else {
+        soundManager.playNumberCall();
+        if (res.room) {
+          setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
+        }
+        setIsCallingNumber(false);
+        setCallingNumberVal(null);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error calling number';
+      setCallError(msg);
+      setIsCallingNumber(false);
+      setCallingNumberVal(null);
+    }
+  };
 
   const toggleSound = () => {
     const next = soundManager.toggleSound();
@@ -59,19 +179,27 @@ export function ActiveGameView({ room, currentPlayer, onExit }: ActiveGameViewPr
 
   const winningWord = room.config.winningWord;
   const completedLetters = game?.completedLetters ?? 0;
+  const calledNumbers = game?.calledNumbers || [];
+  const currentNumber =
+    game?.currentNumber ?? (calledNumbers.length > 0 ? calledNumbers[calledNumbers.length - 1] : null);
+  const currentCallerName =
+    game?.currentCallerName ||
+    (game?.lastCalledNumbers && game.lastCalledNumbers.length > 0
+      ? game.lastCalledNumbers[0].playerName
+      : null);
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-6 sm:py-8 space-y-6 select-none">
-      {/* TOP BAR */}
+      {/* TOP ARENA BAR */}
       <div className="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-arcade-border/80">
         <div className="flex items-center gap-3">
           {onExit && (
             <button
               onClick={onExit}
-              className="inline-flex items-center gap-1.5 text-xs text-arcade-muted hover:text-white transition px-2 py-1 rounded-lg border border-arcade-border/50 hover:bg-arcade-surface"
+              className="inline-flex items-center gap-1.5 text-xs text-arcade-muted hover:text-white transition px-2.5 py-1.5 rounded-lg border border-arcade-border/50 hover:bg-arcade-surface"
             >
               <Home className="w-3.5 h-3.5" />
-              <span>Exit</span>
+              <span>Exit Match</span>
             </button>
           )}
 
@@ -112,11 +240,34 @@ export function ActiveGameView({ room, currentPlayer, onExit }: ActiveGameViewPr
         </div>
       </div>
 
-      {/* 2-Column Main Arena Grid */}
+      {/* ERROR BANNER IF NUMBER CALL FAILED */}
+      <AnimatePresence>
+        {callError && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-xs font-bold text-rose-300 flex items-center justify-between gap-3 shadow-lg"
+          >
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{callError}</span>
+            </div>
+            <button
+              onClick={() => setCallError(null)}
+              className="p-1 rounded-lg hover:bg-rose-500/20 text-rose-300 hover:text-white transition"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 2-COLUMN MAIN ARENA GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column (7 Cols): Current Turn Hero Card + Bingo Board Area */}
+        {/* LEFT COLUMN (7 Cols): Turn Banner + Locked Board + Number Caller Grid */}
         <div className="lg:col-span-7 space-y-6">
-          {/* CURRENT TURN VISUAL CARD */}
+          {/* CURRENT TURN CARD */}
           <motion.div
             layout
             initial={{ opacity: 0, scale: 0.98 }}
@@ -155,19 +306,19 @@ export function ActiveGameView({ room, currentPlayer, onExit }: ActiveGameViewPr
 
                 <p className="mt-1 text-xs sm:text-sm text-arcade-muted">
                   {isMyTurn
-                    ? 'Choose a number to call (Number calling engine unlocks in next prompt).'
-                    : `Currently ${currentTurnPlayer?.name}'s turn. Next up: ${nextPlayer?.name || 'Next'}.`}
+                    ? 'Select an uncalled number from the grid below to broadcast to all contenders!'
+                    : `Currently ${currentTurnPlayer?.name || 'contender'}'s turn. Next in rotation: ${nextPlayer?.name || 'Next'}.`}
                 </p>
               </div>
 
-              {/* Turn Indicator Badge */}
+              {/* Turn Status Pill */}
               <div className="shrink-0">
                 {isMyTurn ? (
                   <div className="py-2.5 px-5 rounded-2xl bg-arcade-magenta/25 border border-arcade-magenta shadow-neon-magenta text-center">
                     <span className="text-xs font-black text-fuchsia-200 tracking-wider block">
                       YOU CALL
                     </span>
-                    <span className="font-mono text-sm font-bold text-white">TURN ACTIVE</span>
+                    <span className="font-mono text-sm font-bold text-white">ACTIVE</span>
                   </div>
                 ) : (
                   <div className="py-2.5 px-4 rounded-2xl bg-arcade-bg/80 border border-arcade-border text-center">
@@ -179,7 +330,7 @@ export function ActiveGameView({ room, currentPlayer, onExit }: ActiveGameViewPr
             </div>
           </motion.div>
 
-          {/* BOARD AREA (LOCKED) */}
+          {/* BOARD AREA (LOCKED & AUTO-HIGHLIGHTED) */}
           <div className="rounded-3xl bg-arcade-card/90 border border-arcade-border p-5 sm:p-6 shadow-arcade-card space-y-4">
             <div className="flex items-center justify-between text-xs pb-3 border-b border-arcade-border/80">
               <div className="flex items-center gap-2">
@@ -189,73 +340,48 @@ export function ActiveGameView({ room, currentPlayer, onExit }: ActiveGameViewPr
                 </span>
               </div>
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-black">
-                LOCKED FOR MATCH
+                AUTO-HIGHLIGHTING ACTIVE
               </span>
             </div>
 
-            {/* Render Bingo Board */}
+            {/* Render Bingo Board with Auto-Highlighting */}
             <BingoBoard
               gridSize={gridSize}
               cells={playerBoard}
               onCellClick={() => {}}
               nextNumber={null}
               isLocked={true}
+              calledNumbers={calledNumbers}
             />
 
             <p className="text-[11px] text-center text-arcade-muted">
-              Your board arrangement is locked. Numbers will be marked as players call them.
+              Called numbers illuminate automatically in gold with glowing rings as calls occur globally.
             </p>
           </div>
+
+          {/* NUMBER CALLER GRID (DYNAMIC 1..N^2 NUMBERS) */}
+          <NumberCallerGrid
+            gridSize={gridSize}
+            calledNumbers={calledNumbers}
+            isMyTurn={isMyTurn}
+            currentCallerName={currentTurnPlayer?.name || 'Active Player'}
+            isProcessing={isCallingNumber}
+            processingNumber={callingNumberVal}
+            onCallNumber={handleCallNumber}
+          />
         </div>
 
-        {/* Right Column (5 Cols): Numbers Container, Winning Word & Turn Order */}
+        {/* RIGHT COLUMN (5 Cols): 3D Ball + Recent Calls + Winning Word & Turn Order */}
         <div className="lg:col-span-5 space-y-6">
-          {/* CALLED NUMBERS CONTAINER (Foundation) */}
-          <TiltCard elevated glowColor="purple" className="p-5 space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-arcade-border/80 text-xs">
-              <span className="font-extrabold text-white uppercase tracking-wider">
-                CALLED NUMBERS
-              </span>
-              <span className="font-mono text-arcade-gold font-bold">
-                {game?.calledNumbers.length ?? 0} Called
-              </span>
-            </div>
+          {/* CURRENT NUMBER HERO 3D BALL */}
+          <CurrentNumberBall
+            currentNumber={currentNumber}
+            callerName={currentCallerName}
+            turnNumber={game?.turnNumber ?? 1}
+          />
 
-            {/* Current Number Hero Box */}
-            <div className="text-center py-4 px-4 rounded-2xl bg-arcade-bg/90 border border-arcade-purple/50 shadow-[inset_0_2px_15px_rgba(0,0,0,0.8)]">
-              <div className="text-[10px] font-extrabold tracking-widest uppercase text-arcade-muted mb-1">
-                CURRENT NUMBER
-              </div>
-              <div className="font-mono text-4xl sm:text-5xl font-black text-white">
-                {game?.calledNumbers.length ? game.calledNumbers[game.calledNumbers.length - 1] : '—'}
-              </div>
-              <div className="text-[10px] text-arcade-muted mt-1">
-                {game?.calledNumbers.length
-                  ? 'Last called by active player'
-                  : 'No number called yet (Game start foundation)'}
-              </div>
-            </div>
-
-            {/* Last 5 Called Numbers */}
-            <div className="space-y-1.5 pt-1">
-              <div className="text-[11px] font-bold text-arcade-muted uppercase tracking-wider">
-                Recent Numbers:
-              </div>
-              <div className="flex items-center gap-2">
-                {[0, 1, 2, 3, 4].map((slotIdx) => {
-                  const num = game?.lastCalledNumbers?.[slotIdx];
-                  return (
-                    <div
-                      key={slotIdx}
-                      className="flex-1 h-9 rounded-xl bg-arcade-surface/80 border border-arcade-border/80 flex items-center justify-center font-mono font-bold text-xs text-white shadow-sm"
-                    >
-                      {num !== undefined ? num : '·'}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </TiltCard>
+          {/* LAST 5 CALLED NUMBERS */}
+          <RecentCallsList lastCalledNumbers={game?.lastCalledNumbers || []} />
 
           {/* WINNING PROGRESS CARD */}
           <TiltCard className="p-5 space-y-3">
@@ -289,7 +415,7 @@ export function ActiveGameView({ room, currentPlayer, onExit }: ActiveGameViewPr
             </div>
 
             <p className="text-[11px] text-center text-arcade-muted">
-              Complete {gridSize} rows, columns, or diagonal lines to spell {winningWord} and win.
+              Complete lines across {gridSize} cells to unlock letters and win {winningWord}.
             </p>
           </TiltCard>
 
@@ -299,7 +425,7 @@ export function ActiveGameView({ room, currentPlayer, onExit }: ActiveGameViewPr
               <span className="font-extrabold text-white uppercase tracking-wider">
                 TURN ROTATION
               </span>
-              <span className="text-arcade-muted text-[11px]">Circular Order</span>
+              <span className="text-arcade-muted text-[11px]">Continuous Loop</span>
             </div>
 
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
@@ -336,7 +462,7 @@ export function ActiveGameView({ room, currentPlayer, onExit }: ActiveGameViewPr
                       </span>
 
                       {player.isHost && (
-                        <span className="text-[10px] font-black text-amber-300">
+                        <span className="text-[10px] font-black text-amber-300" title="Host">
                           👑
                         </span>
                       )}
