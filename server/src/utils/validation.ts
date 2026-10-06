@@ -216,3 +216,67 @@ export function validatePlayerBoard(
 
   return { isValid: true };
 }
+
+export interface TurnOrderValidationResult {
+  isValid: boolean;
+  error?: string;
+  cleanOrder?: string[];
+}
+
+/**
+ * Validates configured player turn order.
+ * - Must be an array of player IDs
+ * - Must contain every room player exactly once
+ * - No duplicates or unknown player IDs
+ */
+export function validateTurnOrderInput(
+  rawOrder: unknown,
+  allowedPlayerIds: string[]
+): TurnOrderValidationResult {
+  if (!Array.isArray(rawOrder)) {
+    return { isValid: false, error: 'Turn order must be an array of player IDs.' };
+  }
+
+  if (rawOrder.length === 0) {
+    return { isValid: false, error: 'Turn order cannot be empty.' };
+  }
+
+  if (rawOrder.length !== allowedPlayerIds.length) {
+    return {
+      isValid: false,
+      error: `Turn order must include all ${allowedPlayerIds.length} participating players (received ${rawOrder.length}).`,
+    };
+  }
+
+  const allowedSet = new Set(allowedPlayerIds);
+  const seen = new Set<string>();
+  const cleanOrder: string[] = [];
+
+  for (let i = 0; i < rawOrder.length; i++) {
+    const rawId = rawOrder[i];
+    if (typeof rawId !== 'string' || !rawId.trim()) {
+      return { isValid: false, error: `Invalid player ID at position ${i + 1}.` };
+    }
+    const id = rawId.trim();
+
+    if (!allowedSet.has(id)) {
+      return {
+        isValid: false,
+        error: `Player ID "${id}" does not belong to this room.`,
+      };
+    }
+
+    if (seen.has(id)) {
+      return {
+        isValid: false,
+        error: `Duplicate player "${id}" in turn order. Every participating player must appear exactly once.`,
+      };
+    }
+
+    seen.add(id);
+    cleanOrder.push(id);
+  }
+
+  return { isValid: true, cleanOrder };
+}
+

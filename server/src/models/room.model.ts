@@ -1,6 +1,61 @@
 import { Schema, model } from 'mongoose';
 import { IRoomDocument } from '../types';
 
+const GameStateSchema = new Schema(
+  {
+    status: {
+      type: String,
+      enum: ['waiting', 'ready', 'active', 'won', 'ended'],
+      default: 'waiting',
+    },
+    startedAt: {
+      type: Date,
+      default: null,
+    },
+    playerOrder: {
+      type: [String],
+      default: [],
+    },
+    currentTurnIndex: {
+      type: Number,
+      default: 0,
+    },
+    currentPlayerId: {
+      type: String,
+      default: null,
+    },
+    turnNumber: {
+      type: Number,
+      default: 0,
+    },
+    calledNumbers: {
+      type: [Number],
+      default: [],
+    },
+    lastCalledNumbers: {
+      type: [Number],
+      default: [],
+    },
+    winnerId: {
+      type: String,
+      default: null,
+    },
+    winningWord: {
+      type: String,
+      default: '',
+    },
+    completedLetters: {
+      type: Number,
+      default: 0,
+    },
+    gamePlayers: {
+      type: [String],
+      default: [],
+    },
+  },
+  { _id: false }
+);
+
 const RoomSchema = new Schema<IRoomDocument>(
   {
     roomCode: {
@@ -47,6 +102,27 @@ const RoomSchema = new Schema<IRoomDocument>(
     players: {
       type: [String],
       default: [],
+    },
+    turnOrder: {
+      type: [String],
+      default: [],
+    },
+    game: {
+      type: GameStateSchema,
+      default: () => ({
+        status: 'waiting',
+        startedAt: null,
+        playerOrder: [],
+        currentTurnIndex: 0,
+        currentPlayerId: null,
+        turnNumber: 0,
+        calledNumbers: [],
+        lastCalledNumbers: [],
+        winnerId: null,
+        winningWord: '',
+        completedLetters: 0,
+        gamePlayers: [],
+      }),
     },
     status: {
       type: String,

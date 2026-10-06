@@ -4,17 +4,56 @@ import {
   CreateRoomInput,
   PublicRoom,
   PublicPlayer,
+  PublicGameState,
+  IGameState,
   IPlayerDocument,
   IRoomDocument,
 } from '../types';
 import { generateUniqueRoomCode, generatePlayerId } from '../utils/roomCode';
-import { validatePlayerBoard } from '../utils/validation';
+import { validatePlayerBoard, validateTurnOrderInput } from '../utils/validation';
 
 export interface ServiceResult<T> {
   success: boolean;
   statusCode: number;
   message: string;
   data?: T;
+}
+
+/**
+ * Format internal game state document to safe public structure.
+ */
+export function formatPublicGameState(game?: IGameState): PublicGameState {
+  if (!game) {
+    return {
+      status: 'waiting',
+      startedAt: null,
+      playerOrder: [],
+      currentTurnIndex: 0,
+      currentPlayerId: null,
+      turnNumber: 0,
+      calledNumbers: [],
+      lastCalledNumbers: [],
+      winnerId: null,
+      winningWord: '',
+      completedLetters: 0,
+      gamePlayers: [],
+    };
+  }
+
+  return {
+    status: game.status || 'waiting',
+    startedAt: game.startedAt ? game.startedAt.toISOString() : null,
+    playerOrder: game.playerOrder || [],
+    currentTurnIndex: game.currentTurnIndex || 0,
+    currentPlayerId: game.currentPlayerId || null,
+    turnNumber: game.turnNumber || 0,
+    calledNumbers: game.calledNumbers || [],
+    lastCalledNumbers: game.lastCalledNumbers || [],
+    winnerId: game.winnerId || null,
+    winningWord: game.winningWord || '',
+    completedLetters: game.completedLetters || 0,
+    gamePlayers: game.gamePlayers || [],
+  };
 }
 
 /**
@@ -49,6 +88,8 @@ export function formatPublicRoom(
     hostParticipates: room.hostParticipates,
     status: room.status,
     allSubmitted,
+    turnOrder: room.turnOrder || [],
+    game: formatPublicGameState(room.game),
     host: {
       playerId: room.hostPlayerId,
       name: hostName,
@@ -144,11 +185,11 @@ export const roomService = {
     }
 
     // 2. Check room status
-    if (room.status === 'playing') {
+    if (room.status === 'playing' || room.game?.status === 'active') {
       return {
         success: false,
         statusCode: 409,
-        message: 'The match has already started in this room.',
+        message: 'Game already started. You cannot join this room.',
       };
     }
 
