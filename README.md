@@ -2,9 +2,9 @@
 
 **Bingo Arena** is a real-time turn-based multiplayer number-grid arcade game built for high-concurrency competitive matches (5 to 30 players per room) on dynamic $N \times N$ matrices (from 5×5 up to 10×10 and larger).
 
-> 🟢 **Project Status**: **Prompt 6 (Player Board Creation & Locking System)** completed.  
-> Manual sequential number placement ($1 \to N^2$), interactive dynamic $N \times N$ matrix (`BingoBoard`), undo & reset mechanics, server-authoritative validation, MongoDB board persistence, board locking, real-time submission roster, and `allSubmitted` room readiness detection are fully active.  
-> *Turn-based number calling, called number marking, and win evaluation are staged for subsequent prompts (Prompt 7).*
+> 🟢 **Project Status**: **Prompt 7 (Turn Order Configuration + Game Start Engine)** completed.  
+> Host-configurable turn order with live [↑] / [↓] buttons, real-time participant freezing (`gamePlayers`), server-authoritative game start validation, active match state management, initial turn assignment to the first player without auto-calling, late-join rejection protection, circular `advanceTurn` rotation foundation, and the 3D Active Game View foundation are fully active.  
+> *Number calling mechanisms, called number uniqueness checking, board auto-highlighting, and line/Bingo win detection are staged for subsequent prompts (Prompt 8).*
 
 ---
 
@@ -280,10 +280,11 @@ npm run client
 | **Prompt 4 (Database & API)** | `node test-prompt4-suite.js` | 24 tests: grid validation, word length checks, capacity bounds, name collisions, Mongoose persistence. |
 | **Prompt 5 (Socket.IO Multiplayer)** | `node test-prompt5-suite.js` | 10 tests: real-time multi-socket joins, 4-client live sync, disconnect state, reconnect idempotency, intentional leave, host closure, invalid socket identity rejection. |
 | **Prompt 6 (Player Board System)** | `node test-prompt6-suite.js` | 24 tests: 5×5 and 6×6 submissions, incomplete board rejection (400), duplicate number rejection (400), out-of-range rejection (400), anti-cheating lock rejection (409), GET board verification, multi-player `allSubmitted: true` sync, and dynamic large grids (7×7, 10×10, 20×20). |
+| **Prompt 7 (Turn Order & Game Start)** | `node test-prompt7-suite.js` | 12 tests: 4-player setup, premature start rejection before boards submitted (400), non-host turn order configuration rejection (403), duplicate/missing/unknown player order rejection (400), valid turn order update (200), non-host start rejection (403), authoritative game start (200, status="playing", game.status="active", first player receives turn, calledNumbers=[]), double start rejection (409), late-join rejection (409), circular `advanceTurn` helper rotation (C -> A -> Host -> B -> C). |
 
 ---
 
-## ⏸️ Features Intentionally Postponed to Later Prompts
+## ⏸️ Features Intentionally Postponed to Prompt 8 (Number Calling & Detection)
 
 - **Bingo Board Matrix Generation**: Number placing, sequential number assignment (1 to $N^2$), and anti-tamper locking.
 - **Board Submission Flow**: Ready state tracking and board validation before match start.

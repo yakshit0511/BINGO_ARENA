@@ -54,6 +54,22 @@ async function startServer(): Promise<void> {
     console.warn('⚠️  Proceeding with server startup; database status is currently:', getDatabaseStatus());
   }
 
+  // Handle port conflicts gracefully
+  httpServer.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE' && config.port !== 5001) {
+      console.warn(`⚠️ Port ${config.port} is in use. Falling back to port 5001...`);
+      httpServer.listen(5001, () => {
+        console.log('==============================================');
+        console.log(`🎮 BINGO ARENA Server running on fallback port 5001`);
+        console.log(`🌐 Health endpoint: http://localhost:5001/api/health`);
+        console.log('==============================================');
+      });
+    } else {
+      console.error('Fatal server network error:', err);
+      process.exit(1);
+    }
+  });
+
   // Start HTTP Server
   httpServer.listen(config.port, () => {
     console.log('==============================================');

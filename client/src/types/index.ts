@@ -32,6 +32,22 @@ export interface Player {
 }
 
 export type RoomStatus = 'waiting' | 'ready' | 'playing' | 'finished';
+export type GameStatus = 'waiting' | 'ready' | 'active' | 'won' | 'ended';
+
+export interface GameState {
+  status: GameStatus;
+  startedAt: string | null;
+  playerOrder: string[];
+  currentTurnIndex: number;
+  currentPlayerId: string | null;
+  turnNumber: number;
+  calledNumbers: number[];
+  lastCalledNumbers: number[];
+  winnerId: string | null;
+  winningWord: string;
+  completedLetters: number;
+  gamePlayers: string[];
+}
 
 export interface Room {
   roomCode: string;
@@ -41,6 +57,8 @@ export interface Room {
   players: Player[];
   status: RoomStatus;
   allSubmitted?: boolean;
+  turnOrder?: string[];
+  game?: GameState;
   createdAt: number;
 }
 

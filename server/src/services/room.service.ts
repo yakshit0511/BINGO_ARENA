@@ -514,4 +514,285 @@ export const roomService = {
       },
     };
   },
+
+  /**
+   * Update the turn order of players for a room (Host only).
+   */
+  async updateTurnOrder(
+    roomCode: string,
+    requesterPlayerId: string,
+    playerOrder: unknown
+  ): Promise<ServiceResult<PublicRoom>> {
+    const cleanCode = roomCode.trim().toUpperCase();
+
+    const room = await RoomModel.findOne({ roomCode: cleanCode });
+    if (!room) {
+      return { success: false, statusCode: 404, message: `Room "${cleanCode}" not found.` };
+    }
+
+    // 1. Host permission check
+    if (room.hostPlayerId !== requesterPlayerId) {
+      return {
+        success: false,
+        statusCode: 403,
+        message: 'Only the host can modify turn order.',
+      };
+    }
+
+    // 2. Active game check
+    if (room.status === 'playing' || room.game?.status === 'active') {
+      return {
+        success: false,
+        statusCode: 409,
+        message: 'Turn order cannot be modified after the game has started.',
+      };
+    }
+
+    // 3. Validate turn order array against current room players
+    const validation = validateTurnOrderInput(playerOrder, room.players);
+    if (!validation.isValid || !validation.cleanOrder) {
+      return {
+        success: false,
+        statusCode: 400,
+        message: validation.error || 'Turn order is invalid. Every participating player must appear exactly once.',
+      };
+    }
+
+    // 4. Validate all participating players have submitted their boards
+    const players = await PlayerModel.find({
+      roomCode: cleanCode,
+      playerId: { $in: room.players },
+    });
+
+    const unsubmitted = players.filter((p) => !p.hasSubmitted);
+    if (unsubmitted.length > 0) {
+      return {
+        success: false,
+        statusCode: 400,
+        message: 'All players must submit their boards before configuring final turn order.',
+      };
+    }
+
+    // 5. Update room turnOrder
+    room.turnOrder = validation.cleanOrder;
+    if (room.game) {
+      room.game.playerOrder = validation.cleanOrder;
+    }
+    await room.save();
+
+    const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
+    const publicRoom = formatPublicRoom(room, players, hostPlayer);
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Turn order updated successfully',
+      data: publicRoom,
+    };
+  },
+
+  /**
+   * Authoritatively starts the Bingo Arena game (Host only).
+   * Freezes participants, initializes game state, sets first turn.
+   */
+  async startGame(
+    roomCode: string,
+    requesterPlayerId: string,
+    customOrder?: unknown
+  ): Promise<ServiceResult<{ room: PublicRoom; game: PublicGameState }>> {
+    const cleanCode = roomCode.trim().toUpperCase();
+
+    const room = await RoomModel.findOne({ roomCode: cleanCode });
+    if (!room) {
+      return { success: false, statusCode: 404, message: `Room "${cleanCode}" not found.` };
+    }
+
+    // 1. Host permission check
+    if (room.hostPlayerId !== requesterPlayerId) {
+      return {
+        success: false,
+        statusCode: 403,
+        message: 'Only the host can start the game.',
+      };
+    }
+
+    // 2. Already started check
+    if (room.status === 'playing' || room.game?.status === 'active') {
+      return {
+        success: false,
+        statusCode: 409,
+        message: 'Game has already started.',
+      };
+    }
+
+    if (room.status === 'finished') {
+      return {
+        success: false,
+        statusCode: 409,
+        message: 'This room match is already closed.',
+      };
+    }
+
+    // 3. Fetch all participating players
+    const players = await PlayerModel.find({
+      roomCode: cleanCode,
+      playerId: { $in: room.players },
+    }).sort({ joinedAt: 1 });
+
+    if (players.length === 0) {
+      return {
+        success: false,
+        statusCode: 400,
+        message: 'No players in room to start game.',
+      };
+    }
+
+    // 4. Validate that all participating players have submitted valid boards
+    const unsubmitted = players.filter((p) => !p.hasSubmitted);
+    if (unsubmitted.length > 0) {
+      const names = unsubmitted.map((p) => p.name).join(', ');
+      return {
+        success: false,
+        statusCode: 400,
+        message: `All players must submit their boards first. Waiting for: ${names}`,
+      };
+    }
+
+    // 5. Determine final turn order
+    let finalOrder: string[] = [];
+
+    // If customOrder was provided in the start request, validate it
+    if (customOrder && Array.isArray(customOrder)) {
+      const customVal = validateTurnOrderInput(customOrder, room.players);
+      if (!customVal.isValid || !customVal.cleanOrder) {
+        return {
+          success: false,
+          statusCode: 400,
+          message: customVal.error || 'Invalid turn order provided.',
+        };
+      }
+      finalOrder = customVal.cleanOrder;
+    } else if (room.turnOrder && room.turnOrder.length === room.players.length) {
+      // Validate saved room.turnOrder
+      const savedVal = validateTurnOrderInput(room.turnOrder, room.players);
+      if (savedVal.isValid && savedVal.cleanOrder) {
+        finalOrder = savedVal.cleanOrder;
+      }
+    }
+
+    // Fallback: Default order if no valid custom order was set (Host first, then others)
+    if (finalOrder.length === 0) {
+      const hostInRoom = players.find((p) => p.playerId === room.hostPlayerId);
+      const otherPlayers = players.filter((p) => p.playerId !== room.hostPlayerId);
+      if (hostInRoom) {
+        finalOrder = [hostInRoom.playerId, ...otherPlayers.map((p) => p.playerId)];
+      } else {
+        finalOrder = players.map((p) => p.playerId);
+      }
+    }
+
+    // 6. Freeze participating players
+    const frozenGamePlayers = [...finalOrder];
+
+    // 7. Initialize authoritative game state (Turn starts on first player, no number called yet)
+    room.game = {
+      status: 'active',
+      startedAt: new Date(),
+      playerOrder: finalOrder,
+      currentTurnIndex: 0,
+      currentPlayerId: finalOrder[0],
+      turnNumber: 1,
+      calledNumbers: [],
+      lastCalledNumbers: [],
+      winnerId: null,
+      winningWord: room.winningWord,
+      completedLetters: 0,
+      gamePlayers: frozenGamePlayers,
+    };
+
+    room.status = 'playing';
+    room.turnOrder = finalOrder;
+    await room.save();
+
+    const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
+    const publicRoom = formatPublicRoom(room, players, hostPlayer);
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Game started successfully.',
+      data: {
+        room: publicRoom,
+        game: publicRoom.game,
+      },
+    };
+  },
+
+  /**
+   * Turn Progression Foundation Helper:
+   * Advances the turn to the next player in the frozen rotation order.
+   * Increments turnNumber, sets currentPlayerId, saves to MongoDB.
+   */
+  async advanceTurn(
+    roomCode: string,
+    requesterPlayerId?: string
+  ): Promise<ServiceResult<{ room: PublicRoom; game: PublicGameState }>> {
+    const cleanCode = roomCode.trim().toUpperCase();
+
+    const room = await RoomModel.findOne({ roomCode: cleanCode });
+    if (!room) {
+      return { success: false, statusCode: 404, message: `Room "${cleanCode}" not found.` };
+    }
+
+    if (room.status !== 'playing' || room.game?.status !== 'active') {
+      return {
+        success: false,
+        statusCode: 400,
+        message: 'Game is not active.',
+      };
+    }
+
+    // If requester is provided, verify it is their turn
+    if (requesterPlayerId && requesterPlayerId !== room.game.currentPlayerId) {
+      return {
+        success: false,
+        statusCode: 403,
+        message: 'Not your turn.',
+      };
+    }
+
+    const order = room.game.playerOrder;
+    if (!order || order.length === 0) {
+      return {
+        success: false,
+        statusCode: 500,
+        message: 'Invalid player order in active game.',
+      };
+    }
+
+    // Increment turn index (circular rotation)
+    const nextIndex = (room.game.currentTurnIndex + 1) % order.length;
+    room.game.currentTurnIndex = nextIndex;
+    room.game.currentPlayerId = order[nextIndex];
+    room.game.turnNumber += 1;
+    await room.save();
+
+    const players = await PlayerModel.find({
+      roomCode: cleanCode,
+      playerId: { $in: room.players },
+    }).sort({ joinedAt: 1 });
+
+    const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
+    const publicRoom = formatPublicRoom(room, players, hostPlayer);
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Turn advanced successfully.',
+      data: {
+        room: publicRoom,
+        game: publicRoom.game,
+      },
+    };
+  },
 };

@@ -49,4 +49,4 @@ export const WORD_SUGGESTIONS_BY_SIZE: Record<number, string[]> = {
   20: ['ELECTROENCEPHALOGRAMS'],
 };
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';

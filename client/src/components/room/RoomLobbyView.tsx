@@ -25,13 +25,18 @@ import {
   leaveRoomSocket,
   onSocketStatusChange,
   SocketConnectionStatus,
+  updateTurnOrderSocket,
+  startGameSocket,
 } from '../../lib/socket';
 import { clearPlayerSession } from '../../lib/session';
+import { soundManager } from '../../lib/sound';
 import { Button } from '../ui/Button';
 import { PlayerList } from './PlayerList';
 import { RoomConfigCard } from './RoomConfigCard';
 import { DynamicGridPreview } from './DynamicGridPreview';
 import { BoardSetupView } from '../board/BoardSetupView';
+import { TurnOrderConfig } from './TurnOrderConfig';
+import { ActiveGameView } from '../game/ActiveGameView';
 
 interface RoomLobbyViewProps {
   room: Room;
@@ -52,11 +57,23 @@ export function RoomLobbyView({
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [isRoomClosed, setIsRoomClosed] = useState(false);
   const [roomClosedMessage, setRoomClosedMessage] = useState('The host has closed this game.');
+  const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [configuredTurnOrder, setConfiguredTurnOrder] = useState<string[]>(
+    initialRoom.turnOrder || []
+  );
 
   const isHost = currentPlayer.isHost;
   const myPlayer = room.players.find((p) => p.id === currentPlayer.id) || currentPlayer;
   const waitingPlayers = room.players.filter((p) => !p.hasSubmitted);
   const allPlayersSubmitted = room.allSubmitted || (room.players.length > 0 && waitingPlayers.length === 0);
+
+  // Synchronize configured turn order when room updates
+  useEffect(() => {
+    if (room.turnOrder && room.turnOrder.length > 0) {
+      setConfiguredTurnOrder(room.turnOrder);
+    }
+  }, [room.turnOrder]);
 
   // Real-time Socket.IO Connection & Events
   useEffect(() => {
@@ -91,8 +108,41 @@ export function RoomLobbyView({
       clearPlayerSession();
     };
 
+    // 4. Turn order updated listener
+    const handleTurnOrderUpdated = (data: { turnOrder?: string[] }) => {
+      if (data?.turnOrder) {
+        setConfiguredTurnOrder(data.turnOrder);
+      }
+    };
+
+    // 5. Game started listener
+    const handleGameStarted = (data: { room?: BackendPublicRoom }) => {
+      soundManager.playGameStart();
+      if (data?.room) {
+        setRoom(mapBackendRoomToClient(data.room));
+      }
+    };
+
+    // 6. Game authoritative state listener
+    const handleGameState = (rawRoom: BackendPublicRoom) => {
+      if (rawRoom && rawRoom.roomCode === room.roomCode) {
+        setRoom(mapBackendRoomToClient(rawRoom));
+      }
+    };
+
+    // 7. Game error listener
+    const handleGameError = (data: { message?: string }) => {
+      if (data?.message) {
+        setStartError(data.message);
+      }
+    };
+
     socket.on('room:state', handleRoomState);
     socket.on('room:closed', handleRoomClosed);
+    socket.on('room:turn-order:updated', handleTurnOrderUpdated);
+    socket.on('game:started', handleGameStarted);
+    socket.on('game:state', handleGameState);
+    socket.on('game:error', handleGameError);
 
     // Initial socket join attempt
     joinRoomSocket(room.roomCode, currentPlayer.id).then((res) => {
@@ -105,8 +155,42 @@ export function RoomLobbyView({
       unsubStatus();
       socket.off('room:state', handleRoomState);
       socket.off('room:closed', handleRoomClosed);
+      socket.off('room:turn-order:updated', handleTurnOrderUpdated);
+      socket.off('game:started', handleGameStarted);
+      socket.off('game:state', handleGameState);
+      socket.off('game:error', handleGameError);
     };
   }, [room.roomCode, currentPlayer.id]);
+
+  const handleTurnOrderChange = async (newOrder: string[]) => {
+    setConfiguredTurnOrder(newOrder);
+    setStartError(null);
+    try {
+      await updateTurnOrderSocket(room.roomCode, currentPlayer.id, newOrder);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update turn order';
+      setStartError(msg);
+    }
+  };
+
+  const handleStartGame = async () => {
+    if (!isHost || isStarting) return;
+    setIsStarting(true);
+    setStartError(null);
+    try {
+      const res = await startGameSocket(room.roomCode, currentPlayer.id, configuredTurnOrder);
+      if (res.success && res.room) {
+        setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
+      } else {
+        setStartError(res.message || 'Failed to start game.');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error starting game';
+      setStartError(msg);
+    } finally {
+      setIsStarting(false);
+    }
+  };
 
   const handleCopyCode = async () => {
     const success = await copyToClipboard(room.roomCode);
@@ -230,6 +314,17 @@ export function RoomLobbyView({
           </div>
         </motion.div>
       </div>
+    );
+  }
+
+  // If game is active / playing, render ActiveGameView
+  if (room.status === 'playing' || room.game?.status === 'active') {
+    return (
+      <ActiveGameView
+        room={room}
+        currentPlayer={myPlayer}
+        onExit={() => setShowLeaveConfirm(true)}
+      />
     );
   }
 
@@ -410,7 +505,28 @@ export function RoomLobbyView({
               </div>
             </div>
 
-            {/* All Players Submitted Celebration / Host Start Foundation */}
+            {/* Turn Order Configuration UI */}
+            {room.players.length > 0 && (
+              <TurnOrderConfig
+                players={room.players}
+                hostPlayerId={room.hostId}
+                currentUserId={currentPlayer.id}
+                isHost={isHost}
+                configuredOrder={configuredTurnOrder}
+                onOrderChange={handleTurnOrderChange}
+                disabled={isStarting}
+              />
+            )}
+
+            {/* Error Message Toast / Alert */}
+            {startError && (
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-xs text-rose-300 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="font-semibold">{startError}</span>
+              </div>
+            )}
+
+            {/* All Players Submitted Celebration / Host Start Action */}
             {allPlayersSubmitted ? (
               <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-400/50 space-y-3 text-center">
                 <div className="flex items-center justify-center gap-2 text-sm font-black text-emerald-300">
@@ -418,7 +534,7 @@ export function RoomLobbyView({
                   <span>🎉 ALL BOARDS READY</span>
                 </div>
                 <p className="text-xs text-slate-300">
-                  All players have submitted their boards. The host can now prepare to start the game.
+                  All participating players have locked in their boards. {isHost ? 'Configure turn order above and launch the game.' : 'Waiting for host to launch.'}
                 </p>
 
                 {isHost ? (
@@ -428,15 +544,13 @@ export function RoomLobbyView({
                       size="lg"
                       className="w-full text-base font-extrabold shadow-neon-gold"
                       leftIcon={<Play className="w-5 h-5 text-arcade-gold" />}
-                      onClick={() => {
-                        // Controlled placeholder foundation for Prompt 7
-                        alert('All boards are ready! Match calling engine will begin in Prompt 7.');
-                      }}
+                      onClick={handleStartGame}
+                      disabled={isStarting}
                     >
-                      START GAME
+                      {isStarting ? 'STARTING ARENA...' : 'START GAME'}
                     </Button>
                     <p className="text-[10px] text-center text-arcade-muted">
-                      Ready to launch match engine.
+                      Locks player roster & begins turn rotation.
                     </p>
                   </div>
                 ) : (
@@ -457,7 +571,7 @@ export function RoomLobbyView({
                       className="w-full text-base font-extrabold opacity-60 cursor-not-allowed"
                       leftIcon={<Play className="w-5 h-5 text-arcade-gold" />}
                     >
-                      START GAME (Disabled)
+                      START GAME (Waiting for Boards)
                     </Button>
                     <p className="text-[11px] text-center text-arcade-muted">
                       Waiting for:{' '}

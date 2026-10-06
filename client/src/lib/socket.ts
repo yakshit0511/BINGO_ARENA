@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 
-const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const SERVER_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 export type SocketConnectionStatus =
   | 'CONNECTING'
@@ -137,6 +137,60 @@ export function leaveRoomSocket(
 
     socket.emit('room:leave', payload, (res: { success: boolean; message?: string }) => {
       resolve(res || { success: true });
+    });
+  });
+}
+
+/**
+ * Emit turn order update via socket with server acknowledgement.
+ */
+export function updateTurnOrderSocket(
+  roomCode: string,
+  playerId: string,
+  playerOrder: string[]
+): Promise<{ success: boolean; message?: string; room?: unknown }> {
+  const socket = getSocket();
+
+  return new Promise((resolve) => {
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    const payload = {
+      roomCode: roomCode.trim().toUpperCase(),
+      playerId: playerId.trim(),
+      playerOrder,
+    };
+
+    socket.emit('room:turn-order:update', payload, (res: { success: boolean; message?: string; room?: unknown }) => {
+      resolve(res || { success: false, message: 'No response from server.' });
+    });
+  });
+}
+
+/**
+ * Emit game start via socket with server acknowledgement.
+ */
+export function startGameSocket(
+  roomCode: string,
+  playerId: string,
+  playerOrder?: string[]
+): Promise<{ success: boolean; message?: string; room?: unknown }> {
+  const socket = getSocket();
+
+  return new Promise((resolve) => {
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    const payload = {
+      roomCode: roomCode.trim().toUpperCase(),
+      playerId: playerId.trim(),
+      playerOrder,
+    };
+
+    socket.emit('game:start', payload, (res: { success: boolean; message?: string; room?: unknown }) => {
+      resolve(res || { success: false, message: 'No response from server.' });
     });
   });
 }

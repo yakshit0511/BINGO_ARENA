@@ -1,23 +1,99 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Gamepad2, Info, PlusCircle, Users } from 'lucide-react';
 import { roomService } from '../lib/roomService';
-import { Room } from '../types';
+import { getPlayerSession, clearPlayerSession } from '../lib/session';
+import { Room, Player } from '../types';
 import { GameMockBoard } from '../components/landing/GameMockBoard';
 import { Button } from '../components/ui/Button';
 import { PageTransition } from '../components/layout/PageTransition';
 import { RoomConfigCard } from '../components/room/RoomConfigCard';
 import { DynamicGridPreview } from '../components/room/DynamicGridPreview';
+import { RoomLobbyView } from '../components/room/RoomLobbyView';
+import { ActiveGameView } from '../components/game/ActiveGameView';
 
 export function GameRoomPage() {
+  const { roomCode: paramCode } = useParams<{ roomCode?: string }>();
+  const navigate = useNavigate();
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const room = roomService.getCurrentRoom();
-    if (room) {
-      setCurrentRoom(room);
+    async function loadRoom() {
+      setLoading(true);
+      const session = getPlayerSession();
+      const targetCode = paramCode || session?.roomCode;
+
+      if (!targetCode) {
+        const cached = roomService.getCurrentRoom();
+        if (cached) {
+          setCurrentRoom(cached);
+          if (cached.players.length > 0) {
+            setCurrentPlayer(cached.players[0]);
+          }
+        }
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await roomService.getRoom(targetCode);
+        if (res.success && res.data) {
+          setCurrentRoom(res.data);
+          const matchedPlayer = session?.playerId
+            ? res.data.players.find((p) => p.id === session.playerId)
+            : res.data.players[0];
+          if (matchedPlayer) {
+            setCurrentPlayer(matchedPlayer);
+          } else if (res.data.players.length > 0) {
+            setCurrentPlayer(res.data.players[0]);
+          }
+        }
+      } catch {
+        // Fallback
+      } finally {
+        setLoading(false);
+      }
     }
-  }, []);
+
+    loadRoom();
+  }, [paramCode]);
+
+  if (loading) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-arcade-purple border-t-arcade-gold rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // If in an active game
+  if (currentRoom && currentPlayer) {
+    if (currentRoom.status === 'playing' || currentRoom.game?.status === 'active') {
+      return (
+        <ActiveGameView
+          room={currentRoom}
+          currentPlayer={currentPlayer}
+          onExit={() => {
+            clearPlayerSession();
+            navigate('/');
+          }}
+        />
+      );
+    }
+
+    return (
+      <RoomLobbyView
+        room={currentRoom}
+        currentPlayer={currentPlayer}
+        onLeave={() => {
+          clearPlayerSession();
+          navigate('/');
+        }}
+      />
+    );
+  }
 
   return (
     <PageTransition className="max-w-6xl mx-auto px-4 py-8 sm:py-12 w-full">

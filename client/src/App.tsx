@@ -16,6 +16,7 @@ export function App() {
           <Route path="/create" element={<CreateGamePage />} />
           <Route path="/join" element={<JoinGamePage />} />
           <Route path="/game" element={<GameRoomPage />} />
+          <Route path="/game/:roomCode" element={<GameRoomPage />} />
           <Route path="/game/setup" element={<SetupGamePage />} />
           <Route path="/results" element={<ResultsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

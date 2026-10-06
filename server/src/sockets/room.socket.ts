@@ -252,6 +252,145 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
   );
 
   /**
+   * Event: room:turn-order:update
+   * Host updates player calling order before starting the game.
+   */
+  socket.on(
+    'room:turn-order:update',
+    async (
+      payload: { roomCode: string; playerId: string; playerOrder: unknown },
+      callback?: AckCallback
+    ) => {
+      try {
+        const roomCode = String(payload?.roomCode || '').trim().toUpperCase();
+        const playerId = String(payload?.playerId || '').trim();
+        const playerOrder = payload?.playerOrder;
+
+        const result = await roomService.updateTurnOrder(roomCode, playerId, playerOrder);
+        if (!result.success || !result.data) {
+          socket.emit('game:error', { message: result.message });
+          if (typeof callback === 'function') {
+            callback({ success: false, message: result.message });
+          }
+          return;
+        }
+
+        const socketRoomName = getSocketRoomName(roomCode);
+        io.to(socketRoomName).emit('room:turn-order:updated', {
+          roomCode,
+          turnOrder: result.data.turnOrder,
+        });
+        io.to(socketRoomName).emit('room:state', result.data);
+
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            message: 'Turn order updated successfully',
+            room: result.data,
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.IO] Error in room:turn-order:update:', error);
+        socket.emit('game:error', { message: 'Internal server error updating turn order.' });
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Internal server error updating turn order.' });
+        }
+      }
+    }
+  );
+
+  /**
+   * Event: game:start
+   * Authoritatively starts the match (Host only).
+   */
+  socket.on(
+    'game:start',
+    async (
+      payload: { roomCode: string; playerId: string; playerOrder?: unknown },
+      callback?: AckCallback
+    ) => {
+      try {
+        const roomCode = String(payload?.roomCode || '').trim().toUpperCase();
+        const playerId = String(payload?.playerId || '').trim();
+        const playerOrder = payload?.playerOrder;
+
+        const result = await roomService.startGame(roomCode, playerId, playerOrder);
+        if (!result.success || !result.data) {
+          socket.emit('game:error', { message: result.message });
+          if (typeof callback === 'function') {
+            callback({ success: false, message: result.message });
+          }
+          return;
+        }
+
+        const socketRoomName = getSocketRoomName(roomCode);
+        io.to(socketRoomName).emit('game:started', result.data.game);
+        io.to(socketRoomName).emit('game:state', result.data.game);
+        io.to(socketRoomName).emit('room:state', result.data.room);
+
+        console.log(`[Socket.IO] Game started in room ${roomCode}. First turn: ${result.data.game.currentPlayerId}`);
+
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            message: 'Game started successfully',
+            room: result.data.room,
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.IO] Error in game:start:', error);
+        socket.emit('game:error', { message: 'Internal server error starting game.' });
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Internal server error starting game.' });
+        }
+      }
+    }
+  );
+
+  /**
+   * Event: game:advance-turn
+   * Turn advancement foundation helper.
+   */
+  socket.on(
+    'game:advance-turn',
+    async (
+      payload: { roomCode: string; playerId?: string },
+      callback?: AckCallback
+    ) => {
+      try {
+        const roomCode = String(payload?.roomCode || '').trim().toUpperCase();
+        const playerId = payload?.playerId ? String(payload.playerId).trim() : undefined;
+
+        const result = await roomService.advanceTurn(roomCode, playerId);
+        if (!result.success || !result.data) {
+          socket.emit('game:error', { message: result.message });
+          if (typeof callback === 'function') {
+            callback({ success: false, message: result.message });
+          }
+          return;
+        }
+
+        const socketRoomName = getSocketRoomName(roomCode);
+        io.to(socketRoomName).emit('game:state', result.data.game);
+        io.to(socketRoomName).emit('room:state', result.data.room);
+
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            message: 'Turn advanced successfully',
+            room: result.data.room,
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.IO] Error in game:advance-turn:', error);
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Internal server error advancing turn.' });
+        }
+      }
+    }
+  );
+
+  /**
    * Event: disconnecting
    * Handles unexpected network drop, tab closure, or browser refresh.
    */

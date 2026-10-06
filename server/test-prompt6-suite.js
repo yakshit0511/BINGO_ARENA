@@ -1,7 +1,7 @@
 // Comprehensive Automated Test Suite for Prompt 6: Player Board Creation System
 const http = require('http');
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = process.env.API_URL || 'http://localhost:5001/api';
 
 function request(method, path, body = null) {
   return new Promise((resolve, reject) => {

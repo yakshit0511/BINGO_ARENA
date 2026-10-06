@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Server } from 'socket.io';
 import { validateCreateRoomInput, validateJoinRoomInput } from '../utils/validation';
 import { roomService } from '../services/room.service';
 
@@ -238,6 +239,144 @@ export async function getBoardHandler(req: Request, res: Response): Promise<void
     res.status(500).json({
       success: false,
       message: 'Internal server error while retrieving board.',
+    });
+  }
+}
+
+/**
+ * PUT /api/rooms/:roomCode/turn-order
+ * Update the player turn order (Host only).
+ */
+export async function updateTurnOrderHandler(req: Request, res: Response): Promise<void> {
+  const rawCode = Array.isArray(req.params.roomCode)
+    ? req.params.roomCode[0]
+    : req.params.roomCode;
+  const roomCode = String(rawCode || '').trim().toUpperCase();
+  const playerId = String(req.body?.playerId || '').trim();
+  const playerOrder = req.body?.playerOrder;
+
+  if (!roomCode || !playerId) {
+    res.status(400).json({
+      success: false,
+      message: 'Valid room code and player ID are required.',
+    });
+    return;
+  }
+
+  try {
+    const result = await roomService.updateTurnOrder(roomCode, playerId, playerOrder);
+
+    if (result.success && result.data) {
+      const io: Server | undefined = req.app.get('io');
+      if (io) {
+        io.to(`room:${roomCode}`).emit('room:turn-order:updated', {
+          roomCode,
+          turnOrder: result.data.turnOrder,
+        });
+        io.to(`room:${roomCode}`).emit('room:state', result.data);
+      }
+    }
+
+    res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error in updateTurnOrderHandler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while updating turn order.',
+    });
+  }
+}
+
+/**
+ * POST /api/rooms/:roomCode/game/start
+ * Authoritatively start the Bingo Arena game (Host only).
+ */
+export async function startGameHandler(req: Request, res: Response): Promise<void> {
+  const rawCode = Array.isArray(req.params.roomCode)
+    ? req.params.roomCode[0]
+    : req.params.roomCode;
+  const roomCode = String(rawCode || '').trim().toUpperCase();
+  const playerId = String(req.body?.playerId || '').trim();
+  const customOrder = req.body?.playerOrder;
+
+  if (!roomCode || !playerId) {
+    res.status(400).json({
+      success: false,
+      message: 'Valid room code and player ID are required.',
+    });
+    return;
+  }
+
+  try {
+    const result = await roomService.startGame(roomCode, playerId, customOrder);
+
+    if (result.success && result.data) {
+      const io: Server | undefined = req.app.get('io');
+      if (io) {
+        io.to(`room:${roomCode}`).emit('game:started', result.data.game);
+        io.to(`room:${roomCode}`).emit('game:state', result.data.game);
+        io.to(`room:${roomCode}`).emit('room:state', result.data.room);
+      }
+    }
+
+    res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error in startGameHandler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while starting game.',
+    });
+  }
+}
+
+/**
+ * POST /api/rooms/:roomCode/game/advance-turn
+ * Advance turn to next player in rotation (Foundation helper).
+ */
+export async function advanceTurnHandler(req: Request, res: Response): Promise<void> {
+  const rawCode = Array.isArray(req.params.roomCode)
+    ? req.params.roomCode[0]
+    : req.params.roomCode;
+  const roomCode = String(rawCode || '').trim().toUpperCase();
+  const playerId = req.body?.playerId ? String(req.body.playerId).trim() : undefined;
+
+  if (!roomCode) {
+    res.status(400).json({
+      success: false,
+      message: 'Room code is required.',
+    });
+    return;
+  }
+
+  try {
+    const result = await roomService.advanceTurn(roomCode, playerId);
+
+    if (result.success && result.data) {
+      const io: Server | undefined = req.app.get('io');
+      if (io) {
+        io.to(`room:${roomCode}`).emit('game:state', result.data.game);
+        io.to(`room:${roomCode}`).emit('room:state', result.data.room);
+      }
+    }
+
+    res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error in advanceTurnHandler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error advancing turn.',
     });
   }
 }
