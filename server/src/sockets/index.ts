@@ -3,6 +3,13 @@ import { Server, Socket } from 'socket.io';
 import { isOriginAllowed } from '../config/cors';
 import { registerRoomSocketHandlers } from './room.socket';
 
+let ioInstance: Server | null = null;
+
+/**
+ * Returns active Socket.IO server instance if initialized.
+ */
+export const getIO = (): Server | null => ioInstance;
+
 /**
  * Initialize Socket.IO instance and register core socket handlers.
  */
@@ -16,6 +23,8 @@ export const initSocketServer = (httpServer: HttpServer): Server => {
       credentials: true,
     },
   });
+
+  ioInstance = io;
 
   io.on('connection', (socket: Socket) => {
     console.log(`[Socket.IO] Client connected: ${socket.id}`);

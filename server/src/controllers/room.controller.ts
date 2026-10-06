@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Server } from 'socket.io';
 import { validateCreateRoomInput, validateJoinRoomInput } from '../utils/validation';
 import { roomService } from '../services/room.service';
+import { getIO } from '../sockets';
 
 /**
  * POST /api/rooms
@@ -52,6 +53,13 @@ export async function joinRoomHandler(req: Request, res: Response): Promise<void
   try {
     const { roomCode, playerName } = validation.data;
     const result = await roomService.joinRoom(roomCode, playerName);
+
+    if (result.success && result.data?.room) {
+      const io: Server | null = req.app.get('io') || getIO();
+      if (io) {
+        io.to(`room:${roomCode.trim().toUpperCase()}`).emit('room:state', result.data.room);
+      }
+    }
     res.status(result.statusCode).json({
       success: result.success,
       message: result.message,
@@ -129,6 +137,17 @@ export async function leaveRoomHandler(req: Request, res: Response): Promise<voi
 
   try {
     const result = await roomService.leaveRoom(roomCode, rawPlayerId.trim());
+
+    if (result.success) {
+      const io: Server | undefined = (req.app.get('io') as Server) || getIO();
+      if (io) {
+        const updatedRoom = await roomService.getRoom(roomCode);
+        if (updatedRoom.success && updatedRoom.data) {
+          io.to(`room:${roomCode.toUpperCase()}`).emit('room:state', updatedRoom.data);
+        }
+      }
+    }
+
     res.status(result.statusCode).json({
       success: result.success,
       message: result.message,
@@ -179,14 +198,14 @@ export async function submitBoardHandler(req: Request, res: Response): Promise<v
     const result = await roomService.submitPlayerBoard(roomCode, playerId, cells);
 
     if (result.success && result.data) {
-      // Broadcast updated room state via Socket.IO if available
+      // Broadcast updated room state via Socket.IO
       try {
-        const { io } = await import('../server');
+        const io: Server | undefined = (req.app.get('io') as Server) || getIO();
         if (io) {
           io.to(`room:${roomCode}`).emit('room:state', result.data.room);
         }
-      } catch {
-        // Socket broadcast optional fallback
+      } catch (err) {
+        console.warn('Socket broadcast warning in submitBoardHandler:', err);
       }
     }
 

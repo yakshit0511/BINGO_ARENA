@@ -36,6 +36,7 @@ app.use((_req: Request, res: Response) => {
 // Create HTTP server & bind Socket.IO
 const httpServer = http.createServer(app);
 const io = initSocketServer(httpServer);
+app.set('io', io);
 
 /**
  * Bootstrap and start server after connecting to MongoDB Atlas.

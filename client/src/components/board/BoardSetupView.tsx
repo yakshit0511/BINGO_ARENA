@@ -22,14 +22,21 @@ interface BoardSetupViewProps {
   room: Room;
   currentPlayer: Player;
   onBackToLobby?: () => void;
+  onRoomUpdate?: (room: Room) => void;
 }
 
 export function BoardSetupView({
   room: initialRoom,
   currentPlayer,
   onBackToLobby,
+  onRoomUpdate,
 }: BoardSetupViewProps) {
   const [room, setRoom] = useState<Room>(initialRoom);
+
+  useEffect(() => {
+    setRoom(initialRoom);
+  }, [initialRoom]);
+
   const gridSize = room.config.gridSize;
   const totalNumbers = gridSize * gridSize;
 
@@ -77,6 +84,7 @@ export function BoardSetupView({
       if (rawRoom && rawRoom.roomCode === room.roomCode) {
         const mapped = mapBackendRoomToClient(rawRoom);
         setRoom(mapped);
+        onRoomUpdate?.(mapped);
 
         // Update local submission state if server reports player has submitted
         const me = mapped.players.find((p) => p.id === currentPlayer.id);
@@ -156,6 +164,7 @@ export function BoardSetupView({
       if (response.success && response.data) {
         setIsSubmitted(true);
         setRoom(response.data.room);
+        onRoomUpdate?.(response.data.room);
       } else {
         setErrorMessage(response.message || 'Failed to submit board.');
       }
@@ -422,18 +431,20 @@ export function BoardSetupView({
                 </p>
 
                 {isHost ? (
-                  <div className="pt-1">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled
-                      className="w-full text-xs font-black shadow-neon-gold"
-                      leftIcon={<Play className="w-4 h-4 text-arcade-gold" />}
-                    >
-                      START MATCH (Ready for Gameplay Prompt)
-                    </Button>
-                    <p className="text-[10px] text-arcade-muted mt-1">
-                      Match engine hooks in Prompt 7.
+                  <div className="pt-1 space-y-2">
+                    {onBackToLobby && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={onBackToLobby}
+                        className="w-full text-xs font-black shadow-neon-gold"
+                        leftIcon={<Play className="w-4 h-4 text-arcade-gold" />}
+                      >
+                        RETURN TO LOBBY TO START GAME
+                      </Button>
+                    )}
+                    <p className="text-[10px] text-arcade-muted">
+                      Set turn order and launch the match in the lobby.
                     </p>
                   </div>
                 ) : (

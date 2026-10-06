@@ -56,28 +56,28 @@ export function BingoBoard({
   // Determine dynamic cell dimension classes based on grid size
   const getCellDimensions = () => {
     if (gridSize <= 5) {
-      return 'w-11 h-11 sm:w-14 sm:h-14 text-sm sm:text-lg';
+      return 'w-10 h-10 min-w-[2.5rem] min-h-[2.5rem] sm:w-14 sm:h-14 sm:min-w-[3.5rem] text-xs sm:text-lg';
     }
     if (gridSize <= 6) {
-      return 'w-10 h-10 sm:w-12 sm:h-12 text-xs sm:text-base';
+      return 'w-8 h-8 min-w-[2rem] min-h-[2rem] sm:w-12 sm:h-12 sm:min-w-[3rem] text-[11px] sm:text-base';
     }
     if (gridSize <= 7) {
-      return 'w-9 h-9 sm:w-11 sm:h-11 text-xs sm:text-sm';
+      return 'w-7 h-7 min-w-[1.75rem] min-h-[1.75rem] sm:w-11 sm:h-11 sm:min-w-[2.75rem] text-[10px] sm:text-sm';
     }
     if (gridSize <= 8) {
-      return 'w-8 h-8 sm:w-10 sm:h-10 text-[11px] sm:text-xs';
+      return 'w-6 h-6 min-w-[1.5rem] min-h-[1.5rem] sm:w-10 sm:h-10 sm:min-w-[2.5rem] text-[9px] sm:text-xs';
     }
     if (gridSize <= 10) {
-      return 'w-7 h-7 sm:w-9 sm:h-9 text-[10px] sm:text-xs';
+      return 'w-5 h-5 min-w-[1.25rem] min-h-[1.25rem] sm:w-8 sm:h-8 sm:min-w-[2rem] text-[8px] sm:text-xs';
     }
     // Very large grids (11-20)
-    return 'w-6 h-6 sm:w-8 sm:h-8 text-[9px] sm:text-[11px]';
+    return 'w-4 h-4 min-w-[1rem] min-h-[1rem] sm:w-7 sm:h-7 sm:min-w-[1.75rem] text-[7px] sm:text-[10px]';
   };
 
   const cellDimClass = getCellDimensions();
 
   return (
-    <div className={`relative flex flex-col items-center select-none ${className}`}>
+    <div className={`relative flex flex-col items-center select-none w-full ${className}`}>
       {/* Board Matrix Container with subtle arcade border & perspective */}
       <div className="max-w-full overflow-x-auto overflow-y-hidden p-2 sm:p-3.5 rounded-2xl bg-arcade-bg/80 border border-arcade-border/60 shadow-inner backdrop-blur-md">
         <div

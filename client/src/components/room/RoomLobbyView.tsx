@@ -63,6 +63,10 @@ export function RoomLobbyView({
     initialRoom.turnOrder || []
   );
 
+  useEffect(() => {
+    setRoom(initialRoom);
+  }, [initialRoom]);
+
   const isHost = currentPlayer.isHost;
   const myPlayer = room.players.find((p) => p.id === currentPlayer.id) || currentPlayer;
   const waitingPlayers = room.players.filter((p) => !p.hasSubmitted);
@@ -116,10 +120,16 @@ export function RoomLobbyView({
     };
 
     // 5. Game started listener
-    const handleGameStarted = (data: { room?: BackendPublicRoom }) => {
+    const handleGameStarted = (data: { room?: BackendPublicRoom; game?: any }) => {
       soundManager.playGameStart();
       if (data?.room) {
         setRoom(mapBackendRoomToClient(data.room));
+      } else {
+        roomService.getRoom(room.roomCode).then((res) => {
+          if (res.success && res.data) {
+            setRoom(res.data);
+          }
+        });
       }
     };
 
@@ -345,6 +355,7 @@ export function RoomLobbyView({
         room={room}
         currentPlayer={myPlayer}
         onBackToLobby={() => setViewMode('LOBBY')}
+        onRoomUpdate={(updatedRoom) => setRoom(updatedRoom)}
       />
     );
   }

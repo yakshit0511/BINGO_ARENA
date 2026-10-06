@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate, Navigate } from 'react-router-dom';
 import { ArrowLeft, Gamepad2, Info, PlusCircle, Users, DoorClosed } from 'lucide-react';
-import { roomService } from '../lib/roomService';
+import { roomService, mapBackendRoomToClient, BackendPublicRoom } from '../lib/roomService';
+import { getSocket, joinRoomSocket } from '../lib/socket';
 import { getPlayerSession, clearPlayerSession } from '../lib/session';
 import { Room, Player } from '../types';
 import { GameMockBoard } from '../components/landing/GameMockBoard';
@@ -59,6 +60,62 @@ export function GameRoomPage() {
 
     loadRoom();
   }, [paramCode]);
+
+  // Real-time synchronization at GameRoomPage root
+  useEffect(() => {
+    if (!currentRoom?.roomCode) return;
+
+    const socket = getSocket();
+    joinRoomSocket(currentRoom.roomCode, currentPlayer?.id || '');
+
+    const handleRoomState = (rawRoom: BackendPublicRoom) => {
+      if (rawRoom && rawRoom.roomCode === currentRoom.roomCode) {
+        const mapped = mapBackendRoomToClient(rawRoom);
+        setCurrentRoom(mapped);
+      }
+    };
+
+    const handleGameStarted = (data: { room?: BackendPublicRoom; game?: any }) => {
+      if (data?.room) {
+        setCurrentRoom(mapBackendRoomToClient(data.room));
+      } else {
+        roomService.getRoom(currentRoom.roomCode).then((res) => {
+          if (res.success && res.data) {
+            setCurrentRoom(res.data);
+          }
+        });
+      }
+    };
+
+    const handleRoomClosed = () => {
+      setCurrentRoom((prev) => (prev ? { ...prev, status: 'closed' } : null));
+    };
+
+    socket.on('room:state', handleRoomState);
+    socket.on('game:started', handleGameStarted);
+    socket.on('room:closed', handleRoomClosed);
+
+    return () => {
+      socket.off('room:state', handleRoomState);
+      socket.off('game:started', handleGameStarted);
+      socket.off('room:closed', handleRoomClosed);
+    };
+  }, [currentRoom?.roomCode, currentPlayer?.id]);
+
+  // Keep currentPlayer synchronized with currentRoom updates
+  useEffect(() => {
+    if (currentRoom && currentPlayer) {
+      const me = currentRoom.players.find((p) => p.id === currentPlayer.id);
+      if (
+        me &&
+        (me.hasSubmitted !== currentPlayer.hasSubmitted ||
+          me.isHost !== currentPlayer.isHost ||
+          me.isConnected !== currentPlayer.isConnected)
+      ) {
+        setCurrentPlayer(me);
+      }
+    }
+  }, [currentRoom, currentPlayer]);
 
   if (loading) {
     return (
