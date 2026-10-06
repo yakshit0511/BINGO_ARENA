@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-arcade-bg: #0B0B10;
+    --color-arcade-surface: #13111C;
+    --color-arcade-elevated: #1A1726;
+    --color-arcade-border: #2A243D;
+    --color-arcade-purple: #7C3AED;
+    --color-arcade-magenta: #D946EF;
+    --color-arcade-gold: #F59E0B;
+    --color-arcade-orange: #F97316;
+    --color-arcade-text: #F8FAFC;
+    --color-arcade-muted: #94A3B8;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    color-scheme: dark;
+    background-color: #0B0B10;
+  }
+
+  body {
+    background-color: #0B0B10;
+    color: #F8FAFC;
+    overflow-x: hidden;
+    min-height: 100vh;
+    font-family: 'Outfit', sans-serif;
+  }
+
+  /* Custom subtle arcade scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #0B0B10;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #2A243D;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #7C3AED;
+  }
+}
+
+@layer utilities {
+  /* Ambient atmospheric backgrounds */
+  .bg-arcade-radial {
+    background: radial-gradient(circle at 50% 20%, rgba(124, 58, 237, 0.12) 0%, rgba(11, 11, 16, 0) 60%),
+                radial-gradient(circle at 80% 80%, rgba(217, 70, 239, 0.08) 0%, rgba(11, 11, 16, 0) 50%),
+                radial-gradient(circle at 20% 90%, rgba(245, 158, 11, 0.05) 0%, rgba(11, 11, 16, 0) 45%),
+                #0B0B10;
+  }
+
+  /* Glass Card Architecture */
+  .glass-card {
+    background: rgba(19, 17, 28, 0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(124, 58, 237, 0.22);
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7);
+  }
+
+  .glass-card-elevated {
+    background: rgba(26, 23, 38, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(217, 70, 239, 0.25);
+    box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.85);
+  }
+
+  /* Text Gradients */
+  .text-gradient-purple-magenta {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-fuchsia-400 to-pink-400;
+  }
+
+  .text-gradient-gold {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-amber-500;
+  }
+
+  /* Glow Utilities */
+  .glow-purple {
+    filter: drop-shadow(0 0 12px rgba(124, 58, 237, 0.5));
+  }
+
+  .glow-magenta {
+    filter: drop-shadow(0 0 12px rgba(217, 70, 239, 0.5));
+  }
+
+  .glow-gold {
+    filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.5));
+  }
+}
+
+/* Accessibility: Prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

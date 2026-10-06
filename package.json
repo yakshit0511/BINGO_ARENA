@@ -1,0 +1,27 @@
+{
+  "name": "bingo-arena",
+  "version": "1.0.0",
+  "description": "Bingo Arena - Real-time Turn-based Multiplayer Number-Grid Arcade Game",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"magenta,cyan\" \"npm run server\" \"npm run client\"",
+    "client": "npm run dev --prefix client",
+    "server": "npm run dev --prefix server",
+    "build": "npm run build --prefix client && npm run build --prefix server",
+    "install:all": "npm install && npm install --prefix client && npm install --prefix server"
+  },
+  "keywords": [
+    "bingo",
+    "multiplayer",
+    "arcade",
+    "react",
+    "threejs",
+    "socketio",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
