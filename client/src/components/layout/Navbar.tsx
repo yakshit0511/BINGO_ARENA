@@ -119,7 +119,7 @@ export function Navbar() {
                   serverOnline === true
                     ? 'bg-emerald-400 shadow-[0_0_8px_#34D399]'
                     : serverOnline === false
-                    ? 'bg-rose-500 shadow-[0_0_8px_#F43F5E]'
+                    ? 'bg-amber-400 animate-pulse shadow-[0_0_8px_#FBBF24]'
                     : 'bg-amber-400 animate-pulse'
                 }`}
               />
@@ -127,16 +127,14 @@ export function Navbar() {
                 className={`font-bold text-[11px] ${
                   serverOnline === true
                     ? 'text-emerald-400'
-                    : serverOnline === false
-                    ? 'text-rose-400'
                     : 'text-amber-400'
                 }`}
               >
                 {serverOnline === true
                   ? 'ONLINE'
                   : serverOnline === false
-                  ? 'OFFLINE'
-                  : 'CONNECTING'}
+                  ? 'WAKING SERVER...'
+                  : 'CONNECTING...'}
               </span>
             </div>
           </nav>

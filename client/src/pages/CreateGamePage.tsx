@@ -112,7 +112,7 @@ export function CreateGamePage() {
         setErrorMessage(response.message || 'Failed to create room on server.');
       }
     } catch {
-      setErrorMessage('Unable to connect to server.');
+      setErrorMessage('Unable to connect to server. If Render backend is waking up from sleep, please wait ~30 seconds and retry.');
     } finally {
       setIsSubmitting(false);
     }

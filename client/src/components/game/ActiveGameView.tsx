@@ -27,6 +27,7 @@ import { WinnerModal } from './WinnerModal';
 import {
   getSocket,
   onSocketStatusChange,
+  SocketConnectionStatus,
   callNumberSocket,
   requestGameStateSocket,
   joinRoomSocket,
@@ -53,6 +54,14 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
   const [callError, setCallError] = useState<string | null>(null);
   const [lineCompletedToast, setLineCompletedToast] = useState<string | null>(null);
   const [isRestartingMatch, setIsRestartingMatch] = useState(false);
+  const [socketStatus, setSocketStatus] = useState<SocketConnectionStatus>('CONNECTED');
+
+  // Monitor real-time socket connection health
+  useEffect(() => {
+    return onSocketStatusChange((status) => {
+      setSocketStatus(status);
+    });
+  }, []);
 
   // Sync prop changes
   useEffect(() => {
@@ -369,6 +378,14 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-6 sm:py-8 space-y-6 select-none relative">
+      {/* RECONNECTING ALERT BANNER */}
+      {socketStatus !== 'CONNECTED' && (
+        <div className="w-full px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 flex items-center justify-center gap-2 text-xs sm:text-sm font-bold shadow-lg animate-pulse">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+          <span>RECONNECTING... Restoring real-time multiplayer connection</span>
+        </div>
+      )}
+
       {/* ROOM CLOSED OVERLAY */}
       {isRoomClosed && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">

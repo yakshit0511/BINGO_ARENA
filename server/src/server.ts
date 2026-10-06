@@ -2,6 +2,7 @@ import http from 'http';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { config } from './config/env';
+import { corsOptions } from './config/cors';
 import { connectDatabase, getDatabaseStatus } from './config/database';
 import apiRoutes from './routes';
 import { initSocketServer } from './sockets';
@@ -9,12 +10,7 @@ import { initSocketServer } from './sockets';
 const app: Express = express();
 
 // Middleware
-app.use(
-  cors({
-    origin: [config.clientUrl, 'http://localhost:5173', 'http://127.0.0.1:5173'],
-    credentials: true,
-  })
-);
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

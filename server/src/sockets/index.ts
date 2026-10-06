@@ -1,7 +1,6 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import { config } from '../config/env';
-
+import { isOriginAllowed } from '../config/cors';
 import { registerRoomSocketHandlers } from './room.socket';
 
 /**
@@ -10,7 +9,9 @@ import { registerRoomSocketHandlers } from './room.socket';
 export const initSocketServer = (httpServer: HttpServer): Server => {
   const io = new Server(httpServer, {
     cors: {
-      origin: [config.clientUrl, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+      origin: (origin, callback) => {
+        callback(null, isOriginAllowed(origin));
+      },
       methods: ['GET', 'POST'],
       credentials: true,
     },

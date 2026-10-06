@@ -1,6 +1,12 @@
 import { io, Socket } from 'socket.io-client';
 
-const SERVER_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'http://localhost:5001';
+const rawSocketUrl =
+  import.meta.env.VITE_SOCKET_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  'http://localhost:5001';
+
+const SERVER_URL = rawSocketUrl.replace(/\/+$/, '');
 
 export type SocketConnectionStatus =
   | 'CONNECTING'

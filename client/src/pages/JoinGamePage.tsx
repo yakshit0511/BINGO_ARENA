@@ -73,7 +73,7 @@ export function JoinGamePage() {
         setErrorMessage(response.message || 'Unable to join arena room.');
       }
     } catch {
-      setErrorMessage('Network or validation error occurred.');
+      setErrorMessage('Unable to connect to server. If Render backend is waking up, please wait a moment and retry.');
     } finally {
       setIsSubmitting(false);
     }

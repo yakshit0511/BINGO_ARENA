@@ -10,6 +10,8 @@
  * - Scenario G: Strict Security & Role Authorization Enforcement
  */
 
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
+
 const BASE_URL = process.env.API_URL || 'http://localhost:5001/api';
 
 async function request(path, options = {}) {
@@ -250,7 +252,7 @@ async function runLifecycleTestSuite() {
   // Simulate no-winner exhaustion in database
   const mongoose = require('mongoose');
   if (mongoose.connection.readyState === 0) {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb+srv://23it047_db_user:JX9Ef1aARShh0ptR@bingo.4u4xuxl.mongodb.net/?appName=Bingo';
+    const mongoUri = process.env.MONGODB_URI;
     await mongoose.connect(mongoUri);
   }
 
