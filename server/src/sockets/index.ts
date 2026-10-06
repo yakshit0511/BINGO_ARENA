@@ -1,6 +1,5 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import { isOriginAllowed } from '../config/cors';
 import { registerRoomSocketHandlers } from './room.socket';
 
 let ioInstance: Server | null = null;

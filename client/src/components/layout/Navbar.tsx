@@ -12,12 +12,18 @@ import {
   Grid3X3,
 } from 'lucide-react';
 import { checkServerHealth } from '../../lib/api';
+import { soundManager } from '../../lib/sound';
 
 export function Navbar() {
   const [serverOnline, setServerOnline] = useState<boolean | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(() => soundManager.isSoundEnabled());
   const location = useLocation();
+
+  const handleToggleSound = () => {
+    const next = soundManager.toggleSound();
+    setSoundEnabled(next);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -87,9 +93,9 @@ export function Navbar() {
               );
             })}
 
-            {/* Sound Effects Toggle Placeholder */}
+            {/* Sound Effects Toggle */}
             <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
+              onClick={handleToggleSound}
               title={soundEnabled ? 'Sound FX: ON (Click to mute)' : 'Sound FX: MUTED (Click to enable)'}
               aria-label={soundEnabled ? 'Mute sound effects' : 'Unmute sound effects'}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-arcade-surface border border-arcade-border text-arcade-muted hover:text-white hover:border-arcade-purple/40 transition"
@@ -143,7 +149,7 @@ export function Navbar() {
           <div className="flex items-center space-x-2 md:hidden">
             {/* Mobile Sound Toggle */}
             <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
+              onClick={handleToggleSound}
               className="p-2 rounded-xl bg-arcade-surface border border-arcade-border text-arcade-muted hover:text-white"
               aria-label="Toggle sound"
             >

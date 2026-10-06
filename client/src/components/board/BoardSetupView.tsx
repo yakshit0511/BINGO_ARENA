@@ -158,10 +158,10 @@ export function BoardSetupView({
 
     return () => {
       socket.off('room:state', handleRoomState);
+      socket.off('game:rematch', handleGameRematch);
       socket.off('game:started', handleGameStarted);
     };
   }, [room.roomCode, currentPlayer.id, currentPlayer.hasSubmitted, totalNumbers, onRoomUpdate]);
-
 
   // Click empty cell to place next sequential number
   const handleCellClick = (index: number) => {
@@ -173,6 +173,19 @@ export function BoardSetupView({
     updatedCells[index] = nextNumber;
     setCells(updatedCells);
     setPlacementHistory((prev) => [...prev, index]);
+    setErrorMessage(null);
+  };
+
+  // Instant Auto-Fill: quickly populate all numbers 1..N^2 with zero waiting time
+  const handleAutoFill = () => {
+    if (isSubmitted) return;
+    const nums = Array.from({ length: totalNumbers }, (_, i) => i + 1);
+    for (let i = nums.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [nums[i], nums[j]] = [nums[j], nums[i]];
+    }
+    setCells(nums);
+    setPlacementHistory(nums.map((_, idx) => idx));
     setErrorMessage(null);
   };
 
@@ -324,7 +337,21 @@ export function BoardSetupView({
           />
 
           {/* Board Action Buttons */}
-          <div className="flex items-center justify-center gap-3 flex-wrap pt-2 w-full max-w-md">
+          <div className="flex items-center justify-center gap-2.5 flex-wrap pt-2 w-full max-w-lg">
+            {/* Auto-Fill Button */}
+            {!isSubmitted && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleAutoFill}
+                title="Instantly place all numbers randomly"
+                leftIcon={<Sparkles className="w-4 h-4 text-arcade-gold" />}
+                className="bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25"
+              >
+                AUTO-FILL
+              </Button>
+            )}
+
             {/* Undo Button */}
             <Button
               variant="secondary"
@@ -333,7 +360,7 @@ export function BoardSetupView({
               onClick={handleUndo}
               leftIcon={<Undo2 className="w-4 h-4 text-arcade-gold" />}
             >
-              UNDO LAST
+              UNDO
             </Button>
 
             {/* Reset Button */}

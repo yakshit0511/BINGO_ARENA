@@ -17,7 +17,7 @@ import {
   CALLING_MODES,
   WORD_SUGGESTIONS_BY_SIZE,
 } from '../constants';
-import { GameConfig, CallingMode, Room, Player } from '../types';
+import { GameConfig, CallingMode, MarkingMode, Room, Player } from '../types';
 import { validateWinningWord, validatePlayerName } from '../utils/validation';
 import { roomService } from '../lib/roomService';
 import { Button } from '../components/ui/Button';
@@ -35,6 +35,7 @@ export function CreateGamePage() {
   const [playerLimit, setPlayerLimit] = useState<number>(10);
   const [winningWord, setWinningWord] = useState<string>('BINGO');
   const [callingMode, setCallingMode] = useState<CallingMode>('turn-based');
+  const [markingMode, setMarkingMode] = useState<MarkingMode>('auto');
   const [hostParticipates, setHostParticipates] = useState<boolean>(true);
 
   // Loading, Error & Submission State
@@ -64,8 +65,9 @@ export function CreateGamePage() {
       winningWord: wordValidation.cleanWord || winningWord.toUpperCase(),
       callingMode,
       hostParticipates,
+      markingMode,
     }),
-    [gridSize, playerLimit, wordValidation.cleanWord, winningWord, callingMode, hostParticipates]
+    [gridSize, playerLimit, wordValidation.cleanWord, winningWord, callingMode, hostParticipates, markingMode]
   );
 
   // Handle Grid Size Change
@@ -340,7 +342,51 @@ export function CreateGamePage() {
             </TiltCard>
           </div>
 
-          {/* Section 5: Host Participation */}
+          {/* Section 5: Marking Mode */}
+          <TiltCard className="p-5 space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-arcade-border/80">
+              <label className="text-xs font-black uppercase tracking-wider text-arcade-muted flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Marking Mode</span>
+              </label>
+              <span className="text-[11px] font-mono font-bold text-cyan-400">
+                {markingMode === 'auto' ? 'Online Auto-Daub' : 'Manual Party Room'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setMarkingMode('auto')}
+                className={`p-2.5 rounded-xl text-xs font-bold border transition text-center ${
+                  markingMode === 'auto'
+                    ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.3)]'
+                    : 'bg-arcade-bg/80 border-arcade-border text-slate-400 hover:text-white'
+                }`}
+              >
+                ⚡ Auto-Daub
+              </button>
+              <button
+                type="button"
+                onClick={() => setMarkingMode('manual')}
+                className={`p-2.5 rounded-xl text-xs font-bold border transition text-center ${
+                  markingMode === 'manual'
+                    ? 'bg-purple-500/20 border-purple-400 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.3)]'
+                    : 'bg-arcade-bg/80 border-arcade-border text-slate-400 hover:text-white'
+                }`}
+              >
+                👆 Manual Mode
+              </button>
+            </div>
+
+            <p className="text-[11px] text-arcade-muted leading-relaxed">
+              {markingMode === 'auto'
+                ? 'Called numbers automatically highlight on all player boards with real-time sync.'
+                : 'Players must physically listen and tap called numbers on their own board (Ideal for in-person party rooms).'}
+            </p>
+          </TiltCard>
+
+          {/* Section 6: Host Participation */}
           <TiltCard className="p-5">
             <label className="flex items-start gap-3 cursor-pointer select-none">
               <input

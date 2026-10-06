@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate, Navigate } from 'react-router-dom';
 import { ArrowLeft, Gamepad2, Info, PlusCircle, Users, DoorClosed } from 'lucide-react';
 import { roomService, mapBackendRoomToClient, BackendPublicRoom } from '../lib/roomService';
-import { getSocket, joinRoomSocket } from '../lib/socket';
+import { getSocket, joinRoomSocket, getSocketStatus } from '../lib/socket';
 import { getPlayerSession, clearPlayerSession } from '../lib/session';
 import { Room, Player } from '../types';
 import { GameMockBoard } from '../components/landing/GameMockBoard';
@@ -12,6 +12,7 @@ import { RoomConfigCard } from '../components/room/RoomConfigCard';
 import { DynamicGridPreview } from '../components/room/DynamicGridPreview';
 import { RoomLobbyView } from '../components/room/RoomLobbyView';
 import { ActiveGameView } from '../components/game/ActiveGameView';
+import { BingoLoader } from '../components/ui/BingoLoader';
 
 export function GameRoomPage() {
   const { roomCode: paramCode } = useParams<{ roomCode?: string }>();
@@ -122,16 +123,18 @@ export function GameRoomPage() {
     };
   }, [currentRoom?.roomCode, currentPlayer?.id, navigate]);
 
-  // Periodic heartbeat polling as guaranteed fallback when socket drops/reconnects
+  // Periodic heartbeat polling as guaranteed fallback ONLY when socket drops or reconnects
   useEffect(() => {
     if (!currentRoom?.roomCode) return;
     const interval = setInterval(() => {
-      roomService.getRoom(currentRoom.roomCode).then((res) => {
-        if (res.success && res.data) {
-          setCurrentRoom(res.data);
-        }
-      }).catch(() => {});
-    }, 2500);
+      if (getSocketStatus() !== 'CONNECTED') {
+        roomService.getRoom(currentRoom.roomCode).then((res) => {
+          if (res.success && res.data) {
+            setCurrentRoom(res.data);
+          }
+        }).catch(() => {});
+      }
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [currentRoom?.roomCode]);
@@ -153,8 +156,8 @@ export function GameRoomPage() {
 
   if (loading) {
     return (
-      <div className="min-h-[50vh] flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-arcade-purple border-t-arcade-gold rounded-full animate-spin" />
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <BingoLoader label="Synchronizing with Arena..." size="md" />
       </div>
     );
   }
