@@ -43,6 +43,15 @@ export interface BackendPublicGameState {
   lastCalledNumbers: BackendPublicCallRecord[];
   winnerId: string | null;
   winnerName?: string | null;
+  loserId?: string | null;
+  loserName?: string | null;
+  rankings?: Array<{
+    playerId: string;
+    playerName: string;
+    rank: number;
+    finishedAt: string;
+  }>;
+  finishedPlayerIds?: string[];
   winningNumber?: number | null;
   wonAt?: string | null;
   winningWord: string;
@@ -140,6 +149,10 @@ export function mapBackendRoomToClient(backendRoom: BackendPublicRoom): Room {
           lastCalledNumbers: backendRoom.game.lastCalledNumbers || [],
           winnerId: backendRoom.game.winnerId || null,
           winnerName: backendRoom.game.winnerName || null,
+          loserId: backendRoom.game.loserId || null,
+          loserName: backendRoom.game.loserName || null,
+          rankings: backendRoom.game.rankings || [],
+          finishedPlayerIds: backendRoom.game.finishedPlayerIds || [],
           winningNumber: backendRoom.game.winningNumber ?? null,
           wonAt: backendRoom.game.wonAt || null,
           winningWord: backendRoom.game.winningWord || backendRoom.winningWord,

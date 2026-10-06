@@ -69,6 +69,13 @@ export interface PublicRoundRecord {
   callHistory?: PublicCallRecord[];
 }
 
+export interface PlayerRanking {
+  playerId: string;
+  playerName: string;
+  rank: number;
+  finishedAt: string;
+}
+
 export interface IGameState {
   status: GameStatus;
   startedAt: Date | null;
@@ -86,6 +93,15 @@ export interface IGameState {
   lastCalledNumbers: CallRecord[];
   winnerId: string | null;
   winnerName: string | null;
+  loserId?: string | null;
+  loserName?: string | null;
+  rankings?: Array<{
+    playerId: string;
+    playerName: string;
+    rank: number;
+    finishedAt: Date;
+  }>;
+  finishedPlayerIds?: string[];
   winningNumber: number | null;
   wonAt: Date | null;
   winningWord: string;
@@ -112,6 +128,10 @@ export interface PublicGameState {
   lastCalledNumbers: PublicCallRecord[];
   winnerId: string | null;
   winnerName: string | null;
+  loserId?: string | null;
+  loserName?: string | null;
+  rankings?: PlayerRanking[];
+  finishedPlayerIds?: string[];
   winningNumber: number | null;
   wonAt: string | null;
   winningWord: string;

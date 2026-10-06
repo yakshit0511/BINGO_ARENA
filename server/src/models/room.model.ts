@@ -106,6 +106,29 @@ const GameStateSchema = new Schema(
       type: String,
       default: null,
     },
+    loserId: {
+      type: String,
+      default: null,
+    },
+    loserName: {
+      type: String,
+      default: null,
+    },
+    rankings: {
+      type: [
+        {
+          playerId: { type: String, required: true },
+          playerName: { type: String, required: true },
+          rank: { type: Number, required: true },
+          finishedAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
+    finishedPlayerIds: {
+      type: [String],
+      default: [],
+    },
     winningNumber: {
       type: Number,
       default: null,

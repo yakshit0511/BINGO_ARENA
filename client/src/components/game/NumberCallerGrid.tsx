@@ -51,12 +51,12 @@ export function NumberCallerGrid({
   };
 
   const getButtonDimensions = () => {
-    if (gridSize <= 5) return 'h-11 sm:h-12 text-sm sm:text-base';
-    if (gridSize <= 6) return 'h-10 sm:h-11 text-xs sm:text-sm';
-    if (gridSize <= 7) return 'h-9 sm:h-10 text-xs sm:text-sm';
-    if (gridSize <= 8) return 'h-8 sm:h-9 text-[11px] sm:text-xs';
-    if (gridSize <= 10) return 'h-7 sm:h-8 text-[10px] sm:text-xs';
-    return 'h-7 sm:h-8 text-[10px]';
+    if (gridSize <= 5) return 'h-9 sm:h-12 text-xs sm:text-base';
+    if (gridSize <= 6) return 'h-8 sm:h-11 text-[11px] sm:text-sm';
+    if (gridSize <= 7) return 'h-8 sm:h-10 text-[10px] sm:text-sm';
+    if (gridSize <= 8) return 'h-7 sm:h-9 text-[10px] sm:text-xs';
+    if (gridSize <= 10) return 'h-6 sm:h-8 text-[9px] sm:text-xs';
+    return 'h-6 sm:h-8 text-[9px]';
   };
 
   const gridColsClass = getGridColumnsClass();

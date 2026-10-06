@@ -491,10 +491,9 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
         }
 
         const socketRoomName = getSocketRoomName(roomCode);
-        io.to(socketRoomName).emit('game:restarted', result.data.game);
-        io.to(socketRoomName).emit('game:started', result.data.game);
-        io.to(socketRoomName).emit('game:state', result.data.game);
+        io.to(socketRoomName).emit('game:rematch', { room: result.data.room, game: result.data.game });
         io.to(socketRoomName).emit('room:state', result.data.room);
+        io.to(socketRoomName).emit('game:state', result.data.game);
 
         if (typeof callback === 'function') {
           callback({
@@ -539,10 +538,9 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
         }
 
         const socketRoomName = getSocketRoomName(roomCode);
-        io.to(socketRoomName).emit('game:continued', result.data.game);
-        io.to(socketRoomName).emit('game:started', result.data.game);
-        io.to(socketRoomName).emit('game:state', result.data.game);
+        io.to(socketRoomName).emit('game:rematch', { room: result.data.room, game: result.data.game });
         io.to(socketRoomName).emit('room:state', result.data.room);
+        io.to(socketRoomName).emit('game:state', result.data.game);
 
         if (typeof callback === 'function') {
           callback({

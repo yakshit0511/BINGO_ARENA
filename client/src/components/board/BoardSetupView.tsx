@@ -33,29 +33,36 @@ export function BoardSetupView({
 }: BoardSetupViewProps) {
   const [room, setRoom] = useState<Room>(initialRoom);
 
+  const gridSize = initialRoom.config.gridSize;
+  const totalNumbers = gridSize * gridSize;
+
   useEffect(() => {
     setRoom(initialRoom);
-  }, [initialRoom]);
-
-  const gridSize = room.config.gridSize;
-  const totalNumbers = gridSize * gridSize;
+    const me = initialRoom.players.find((p) => p.id === currentPlayer.id);
+    if (me) {
+      if (!me.hasSubmitted) {
+        setIsSubmitted(false);
+        if (!me.board || me.board.length === 0) {
+          setCells(new Array(totalNumbers).fill(null));
+          setPlacementHistory([]);
+        }
+      } else if (me.hasSubmitted && me.board && me.board.length === totalNumbers) {
+        setIsSubmitted(true);
+        setCells(me.board);
+      }
+    }
+  }, [initialRoom, currentPlayer.id, totalNumbers]);
 
   // Initialize cells from existing player board if already submitted/saved
   const [cells, setCells] = useState<(number | null)[]>(() => {
-    if (currentPlayer.board && currentPlayer.board.length === totalNumbers) {
+    if (currentPlayer.board && currentPlayer.board.length === totalNumbers && currentPlayer.hasSubmitted) {
       return currentPlayer.board;
     }
     return new Array(totalNumbers).fill(null);
   });
 
   // Track placement history for repeated undo operations
-  const [placementHistory, setPlacementHistory] = useState<number[]>(() => {
-    if (currentPlayer.board && currentPlayer.board.length === totalNumbers) {
-      // If already filled, order of indices
-      return [];
-    }
-    return [];
-  });
+  const [placementHistory, setPlacementHistory] = useState<number[]>([]);
 
   const [isSubmitted, setIsSubmitted] = useState<boolean>(currentPlayer.hasSubmitted ?? false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -86,12 +93,29 @@ export function BoardSetupView({
         setRoom(mapped);
         onRoomUpdate?.(mapped);
 
-        // Update local submission state if server reports player has submitted
+        // Update local submission state based on server-reported state
         const me = mapped.players.find((p) => p.id === currentPlayer.id);
         if (me?.hasSubmitted) {
           setIsSubmitted(true);
+        } else if (me && !me.hasSubmitted) {
+          setIsSubmitted(false);
+          if (!me.board || me.board.length === 0) {
+            setCells(new Array(totalNumbers).fill(null));
+            setPlacementHistory([]);
+          }
         }
       }
+    };
+
+    const handleGameRematch = (data: any) => {
+      if (data?.room) {
+        const mapped = mapBackendRoomToClient(data.room);
+        setRoom(mapped);
+        onRoomUpdate?.(mapped);
+      }
+      setIsSubmitted(false);
+      setCells(new Array(totalNumbers).fill(null));
+      setPlacementHistory([]);
     };
 
     const handleGameStarted = (data: any) => {
@@ -120,6 +144,7 @@ export function BoardSetupView({
     };
 
     socket.on('room:state', handleRoomState);
+    socket.on('game:rematch', handleGameRematch);
     socket.on('game:started', handleGameStarted);
 
     // Initial board fetch if already submitted

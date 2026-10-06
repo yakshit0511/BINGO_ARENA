@@ -146,6 +146,21 @@ export function formatPublicGameState(game?: IGameState): PublicGameState {
     lastCalledNumbers: Array.isArray(game.lastCalledNumbers) ? game.lastCalledNumbers.map(formatRecord) : [],
     winnerId: game.winnerId || null,
     winnerName: game.winnerName || null,
+    loserId: game.loserId || null,
+    loserName: game.loserName || null,
+    rankings: Array.isArray(game.rankings)
+      ? game.rankings.map((rk: any) => ({
+          playerId: String(rk.playerId),
+          playerName: String(rk.playerName),
+          rank: Number(rk.rank),
+          finishedAt: rk.finishedAt
+            ? rk.finishedAt instanceof Date
+              ? rk.finishedAt.toISOString()
+              : String(rk.finishedAt)
+            : new Date().toISOString(),
+        }))
+      : [],
+    finishedPlayerIds: Array.isArray(game.finishedPlayerIds) ? game.finishedPlayerIds : [],
     winningNumber: game.winningNumber ?? null,
     wonAt: game.wonAt ? (game.wonAt instanceof Date ? game.wonAt.toISOString() : String(game.wonAt)) : null,
     winningWord: game.winningWord || '',
@@ -1128,37 +1143,115 @@ export const roomService = {
       }
     }
 
-    // 15. Check Win Condition vs All Numbers Used vs Normal Turn Advancement
+    // 15. AUTHORITATIVE "ONLY ONE LOSER" EVALUATION ACROSS PLAYERS
+    if (!Array.isArray(updatedRoom.game.rankings)) {
+      updatedRoom.game.rankings = [];
+    }
+    if (!Array.isArray(updatedRoom.game.finishedPlayerIds)) {
+      updatedRoom.game.finishedPlayerIds = [];
+    }
+
+    // Check newly finished players on this turn
+    // Priority order: caller first, then turn order
+    const priorityPids = [
+      cleanPlayerId,
+      ...frozenOrder.filter((id) => id !== cleanPlayerId),
+    ];
+
+    for (const pid of priorityPids) {
+      const pEval = bingoResult.playerEvaluations.get(pid);
+      if (pEval && pEval.hasWon && !updatedRoom.game.finishedPlayerIds.includes(pid)) {
+        updatedRoom.game.finishedPlayerIds.push(pid);
+        const rank = updatedRoom.game.rankings.length + 1;
+        updatedRoom.game.rankings.push({
+          playerId: pid,
+          playerName: pEval.playerName,
+          rank,
+          finishedAt: now,
+        });
+
+        // First place winner
+        if (rank === 1) {
+          updatedRoom.game.winnerId = pid;
+          updatedRoom.game.winnerName = pEval.playerName;
+          updatedRoom.game.winningNumber = num;
+          updatedRoom.game.wonAt = now;
+          updatedRoom.game.completedLetters = updatedRoom.game.winningWord.length;
+          updatedRoom.game.winningLines = pEval.allCompletedLines;
+          updatedRoom.game.winnerProgress = pEval.completedLineCount;
+        }
+      }
+    }
+
+    const unfinishedPlayers = players.filter(
+      (p) => !updatedRoom.game.finishedPlayerIds?.includes(p.playerId)
+    );
+
     const maxNumbers = updatedRoom.gridSize * updatedRoom.gridSize;
 
-    if (bingoResult.winner) {
-      // WINNER LOCK: Game is won! Turn does NOT advance to next player.
+    if (players.length <= 1) {
+      // Solo / Edge case: Single player finishes or exhausts numbers
+      if (updatedRoom.game.winnerId || updatedRoom.game.calledNumbers.length >= maxNumbers) {
+        updatedRoom.game.status = updatedRoom.game.winnerId ? 'won' : 'no_winner';
+        updatedRoom.game.endedAt = now;
+        updatedRoom.status = 'finished';
+        await updatedRoom.save();
+      }
+    } else if (unfinishedPlayers.length === 1) {
+      // Exactly ONE player has not completed BINGO: That player is the ONLY LOSER!
+      const loser = unfinishedPlayers[0];
+      updatedRoom.game.loserId = loser.playerId;
+      updatedRoom.game.loserName = loser.name;
       updatedRoom.game.status = 'won';
-      updatedRoom.game.winnerId = bingoResult.winner.playerId;
-      updatedRoom.game.winnerName = bingoResult.winner.playerName;
-      updatedRoom.game.winningNumber = num;
-      updatedRoom.game.wonAt = now;
       updatedRoom.game.endedAt = now;
-      updatedRoom.game.completedLetters = updatedRoom.game.winningWord.length;
-      updatedRoom.game.winningLines = bingoResult.winner.allCompletedLines;
-      updatedRoom.game.winnerProgress = bingoResult.winner.completedLineCount;
+      updatedRoom.status = 'finished';
+      await updatedRoom.save();
+    } else if (unfinishedPlayers.length === 0) {
+      // All players finished (e.g. simultaneous finish)
+      const lastRanked = updatedRoom.game.rankings[updatedRoom.game.rankings.length - 1];
+      if (lastRanked) {
+        updatedRoom.game.loserId = lastRanked.playerId;
+        updatedRoom.game.loserName = lastRanked.playerName;
+      }
+      updatedRoom.game.status = 'won';
+      updatedRoom.game.endedAt = now;
       updatedRoom.status = 'finished';
       await updatedRoom.save();
     } else if (updatedRoom.game.calledNumbers.length >= maxNumbers) {
-      // All numbers exhausted without a winner
-      updatedRoom.game.status = 'no_winner';
+      // All numbers exhausted without finding a single loser through letter completions
+      // The unfinished player with the least completed lines is the designated loser
+      const sortedUnfinished = [...unfinishedPlayers].sort(
+        (a, b) => (a.completedLineCount || 0) - (b.completedLineCount || 0)
+      );
+      if (sortedUnfinished.length > 0) {
+        updatedRoom.game.loserId = sortedUnfinished[0].playerId;
+        updatedRoom.game.loserName = sortedUnfinished[0].name;
+      }
+      updatedRoom.game.status = updatedRoom.game.winnerId ? 'won' : 'no_winner';
       updatedRoom.game.endedAt = now;
       updatedRoom.status = 'finished';
       await updatedRoom.save();
     } else {
-      // NO WINNER: Advance turn to the next player in frozen rotation order
-      const nextIndex = (updatedRoom.game.currentTurnIndex + 1) % frozenOrder.length;
+      // MULTIPLE PLAYERS STILL UNFINISHED: Match continues!
+      // Players who completed their letters wait. Advance turn to the next UNFINISHED player in rotation.
+      let nextIndex = (updatedRoom.game.currentTurnIndex + 1) % frozenOrder.length;
+      for (let i = 1; i <= frozenOrder.length; i++) {
+        const candidateIdx = (updatedRoom.game.currentTurnIndex + i) % frozenOrder.length;
+        const candidateId = frozenOrder[candidateIdx];
+        if (!updatedRoom.game.finishedPlayerIds.includes(candidateId)) {
+          nextIndex = candidateIdx;
+          break;
+        }
+      }
+
       const nextPlayerId = frozenOrder[nextIndex];
       const nextTurnNumber = (updatedRoom.game.turnNumber || 1) + 1;
 
       updatedRoom.game.currentTurnIndex = nextIndex;
       updatedRoom.game.currentPlayerId = nextPlayerId;
       updatedRoom.game.turnNumber = nextTurnNumber;
+      updatedRoom.game.status = 'active';
+      updatedRoom.status = 'playing';
       await updatedRoom.save();
     }
 
@@ -1166,12 +1259,14 @@ export const roomService = {
     const hostPlayer = players.find((p) => p.playerId === updatedRoom.hostPlayerId) || null;
     const publicRoom = formatPublicRoom(updatedRoom, players, hostPlayer);
 
+    const isMatchConcluded = updatedRoom.game.status === 'won' || updatedRoom.game.status === 'no_winner';
+
     return {
       success: true,
       statusCode: 200,
-      message: bingoResult.winner
-        ? `Number ${num} called. ${bingoResult.winner.playerName} won the match!`
-        : 'Number called successfully.',
+      message: isMatchConcluded
+        ? `Match concluded! Winner: ${updatedRoom.game.winnerName || 'Champion'}${updatedRoom.game.loserName ? `, Loser: ${updatedRoom.game.loserName}` : ''}`
+        : `Number ${num} called successfully.`,
       data: {
         room: publicRoom,
         game: publicRoom.game,
@@ -1287,17 +1382,6 @@ export const roomService = {
       playerId: { $in: room.players },
     }).sort({ joinedAt: 1 });
 
-    // Validate that all participants still belong and submitted boards exist
-    const expectedBoardLength = room.gridSize * room.gridSize;
-    const invalidBoards = players.filter((p) => !p.board || p.board.length !== expectedBoardLength);
-    if (invalidBoards.length > 0) {
-      return {
-        success: false,
-        statusCode: 400,
-        message: "Unable to start a new round because a player's board is missing.",
-      };
-    }
-
     // 1. Snapshot previous round into roundHistory
     const currentRoundRecord = {
       roundNumber: room.game.roundNumber || 1,
@@ -1319,11 +1403,13 @@ export const roomService = {
       callHistory: room.game.callHistory || [],
     };
 
-    // 2. Reset player progress in database
+    // 2. Reset player boards & submission status in database so all players re-choose numbers
     await PlayerModel.updateMany(
       { roomCode: cleanCode },
       {
         $set: {
+          hasSubmitted: false,
+          board: [],
           completedLines: [],
           earnedLetters: [],
           completedLineCount: 0,
@@ -1331,29 +1417,27 @@ export const roomService = {
       }
     );
 
-    // Synchronize in-memory player instances for formatPublicRoom
+    // Synchronize in-memory player instances
     for (const p of players) {
+      p.hasSubmitted = false;
+      p.board = [];
       p.completedLines = [];
       p.earnedLetters = [];
       p.completedLineCount = 0;
     }
 
-    // 3. Reset round-specific game state and advance roundNumber
-    const order =
-      room.game.playerOrder && room.game.playerOrder.length > 0
-        ? room.game.playerOrder
-        : room.players;
+    // 3. Reset game state to waiting for board setup, advance roundNumber
     const nextRoundNumber = (room.game.roundNumber || 1) + 1;
     const existingHistory = Array.isArray(room.game.roundHistory) ? room.game.roundHistory : [];
 
     room.game.roundHistory = [...existingHistory, currentRoundRecord];
     room.game.roundNumber = nextRoundNumber;
-    room.game.status = 'active';
-    room.game.startedAt = new Date();
+    room.game.status = 'waiting';
+    room.game.startedAt = null;
     room.game.endedAt = null;
-    room.game.turnNumber = 1;
+    room.game.turnNumber = 0;
     room.game.currentTurnIndex = 0;
-    room.game.currentPlayerId = order[0];
+    room.game.currentPlayerId = null;
     room.game.currentNumber = null;
     room.game.currentCallerName = null;
     room.game.calledNumbers = [];
@@ -1361,12 +1445,16 @@ export const roomService = {
     room.game.lastCalledNumbers = [];
     room.game.winnerId = null;
     room.game.winnerName = null;
+    room.game.loserId = null;
+    room.game.loserName = null;
+    room.game.rankings = [];
+    room.game.finishedPlayerIds = [];
     room.game.winningNumber = null;
     room.game.wonAt = null;
     room.game.winningLines = [];
     room.game.winnerProgress = 0;
     room.game.completedLetters = 0;
-    room.status = 'playing';
+    room.status = 'waiting';
     await room.save();
 
     const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
@@ -1375,7 +1463,7 @@ export const roomService = {
     return {
       success: true,
       statusCode: 200,
-      message: `Round ${nextRoundNumber} started successfully.`,
+      message: `Round ${nextRoundNumber} initialized. All players can now configure their boards.`,
       data: {
         room: publicRoom,
         game: publicRoom.game,
@@ -1433,17 +1521,6 @@ export const roomService = {
       playerId: { $in: room.players },
     }).sort({ joinedAt: 1 });
 
-    // Validate that all participants still belong and submitted boards exist
-    const expectedBoardLength = room.gridSize * room.gridSize;
-    const invalidBoards = players.filter((p) => !p.board || p.board.length !== expectedBoardLength);
-    if (invalidBoards.length > 0) {
-      return {
-        success: false,
-        statusCode: 400,
-        message: "Unable to start a new round because a player's board is missing.",
-      };
-    }
-
     // 1. Snapshot previous round into roundHistory
     const currentRoundRecord = {
       roundNumber: room.game.roundNumber || 1,
@@ -1465,11 +1542,13 @@ export const roomService = {
       callHistory: room.game.callHistory || [],
     };
 
-    // 2. Reset player progress in database
+    // 2. Reset player progress and boards in database so players re-choose their numbers
     await PlayerModel.updateMany(
       { roomCode: cleanCode },
       {
         $set: {
+          hasSubmitted: false,
+          board: [],
           completedLines: [],
           earnedLetters: [],
           completedLineCount: 0,
@@ -1477,29 +1556,27 @@ export const roomService = {
       }
     );
 
-    // Synchronize in-memory player instances for formatPublicRoom
+    // Synchronize in-memory player instances
     for (const p of players) {
+      p.hasSubmitted = false;
+      p.board = [];
       p.completedLines = [];
       p.earnedLetters = [];
       p.completedLineCount = 0;
     }
 
     // 3. Reset round-specific game state and advance roundNumber
-    const order =
-      room.game.playerOrder && room.game.playerOrder.length > 0
-        ? room.game.playerOrder
-        : room.players;
     const nextRoundNumber = (room.game.roundNumber || 1) + 1;
     const existingHistory = Array.isArray(room.game.roundHistory) ? room.game.roundHistory : [];
 
     room.game.roundHistory = [...existingHistory, currentRoundRecord];
     room.game.roundNumber = nextRoundNumber;
-    room.game.status = 'active';
-    room.game.startedAt = new Date();
+    room.game.status = 'waiting';
+    room.game.startedAt = null;
     room.game.endedAt = null;
-    room.game.turnNumber = 1;
+    room.game.turnNumber = 0;
     room.game.currentTurnIndex = 0;
-    room.game.currentPlayerId = order[0];
+    room.game.currentPlayerId = null;
     room.game.currentNumber = null;
     room.game.currentCallerName = null;
     room.game.calledNumbers = [];
@@ -1507,12 +1584,16 @@ export const roomService = {
     room.game.lastCalledNumbers = [];
     room.game.winnerId = null;
     room.game.winnerName = null;
+    room.game.loserId = null;
+    room.game.loserName = null;
+    room.game.rankings = [];
+    room.game.finishedPlayerIds = [];
     room.game.winningNumber = null;
     room.game.wonAt = null;
     room.game.winningLines = [];
     room.game.winnerProgress = 0;
     room.game.completedLetters = 0;
-    room.status = 'playing';
+    room.status = 'waiting';
     await room.save();
 
     const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
@@ -1521,7 +1602,7 @@ export const roomService = {
     return {
       success: true,
       statusCode: 200,
-      message: `Round ${nextRoundNumber} restarted successfully.`,
+      message: `Round ${nextRoundNumber} initialized. All players can now configure their boards.`,
       data: {
         room: publicRoom,
         game: publicRoom.game,

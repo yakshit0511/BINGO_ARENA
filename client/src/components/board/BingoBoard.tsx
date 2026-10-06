@@ -56,22 +56,22 @@ export function BingoBoard({
   // Determine dynamic cell dimension classes based on grid size
   const getCellDimensions = () => {
     if (gridSize <= 5) {
-      return 'w-10 h-10 min-w-[2.5rem] min-h-[2.5rem] sm:w-14 sm:h-14 sm:min-w-[3.5rem] text-xs sm:text-lg';
+      return 'w-9 h-9 sm:w-14 sm:h-14 min-w-[1.85rem] sm:min-w-[3.5rem] min-h-[1.85rem] sm:min-h-[3.5rem] text-xs sm:text-lg';
     }
     if (gridSize <= 6) {
-      return 'w-8 h-8 min-w-[2rem] min-h-[2rem] sm:w-12 sm:h-12 sm:min-w-[3rem] text-[11px] sm:text-base';
+      return 'w-8 h-8 sm:w-12 sm:h-12 min-w-[1.65rem] sm:min-w-[3rem] min-h-[1.65rem] sm:min-h-[3rem] text-[11px] sm:text-base';
     }
     if (gridSize <= 7) {
-      return 'w-7 h-7 min-w-[1.75rem] min-h-[1.75rem] sm:w-11 sm:h-11 sm:min-w-[2.75rem] text-[10px] sm:text-sm';
+      return 'w-7 h-7 sm:w-11 sm:h-11 min-w-[1.5rem] sm:min-w-[2.75rem] min-h-[1.5rem] sm:min-h-[2.75rem] text-[10px] sm:text-sm';
     }
     if (gridSize <= 8) {
-      return 'w-6 h-6 min-w-[1.5rem] min-h-[1.5rem] sm:w-10 sm:h-10 sm:min-w-[2.5rem] text-[9px] sm:text-xs';
+      return 'w-6 h-6 sm:w-10 sm:h-10 min-w-[1.35rem] sm:min-w-[2.5rem] min-h-[1.35rem] sm:min-h-[2.5rem] text-[9px] sm:text-xs';
     }
     if (gridSize <= 10) {
-      return 'w-5 h-5 min-w-[1.25rem] min-h-[1.25rem] sm:w-8 sm:h-8 sm:min-w-[2rem] text-[8px] sm:text-xs';
+      return 'w-5 h-5 sm:w-8 sm:h-8 min-w-[1.15rem] sm:min-w-[2rem] min-h-[1.15rem] sm:min-h-[2rem] text-[8px] sm:text-xs';
     }
     // Very large grids (11-20)
-    return 'w-4 h-4 min-w-[1rem] min-h-[1rem] sm:w-7 sm:h-7 sm:min-w-[1.75rem] text-[7px] sm:text-[10px]';
+    return 'w-4 h-4 sm:w-7 sm:h-7 min-w-[1rem] sm:min-w-[1.75rem] min-h-[1rem] sm:min-h-[1.75rem] text-[7px] sm:text-[10px]';
   };
 
   const cellDimClass = getCellDimensions();

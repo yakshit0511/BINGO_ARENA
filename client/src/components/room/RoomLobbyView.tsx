@@ -74,6 +74,13 @@ export function RoomLobbyView({
   const waitingPlayers = room.players.filter((p) => !p.hasSubmitted);
   const allPlayersSubmitted = room.allSubmitted || (room.players.length > 0 && waitingPlayers.length === 0);
 
+  // Automatically switch viewMode to BOARD_SETUP when user has not submitted their board
+  useEffect(() => {
+    if (!myPlayer.hasSubmitted) {
+      setViewMode('BOARD_SETUP');
+    }
+  }, [myPlayer.hasSubmitted, room.game?.roundNumber]);
+
   // Synchronize configured turn order when room updates
   useEffect(() => {
     if (room.turnOrder && room.turnOrder.length > 0) {
@@ -161,7 +168,18 @@ export function RoomLobbyView({
       }
     };
 
-    // 7. Number called listener
+    // 7. Rematch listener (host initiates new round / rematch)
+    const handleGameRematch = (data: { room?: BackendPublicRoom }) => {
+      soundManager.playNewRound();
+      if (data?.room && data.room.roomCode === room.roomCode) {
+        const clientRoom = mapBackendRoomToClient(data.room);
+        setRoom(clientRoom);
+        onRoomUpdate?.(clientRoom);
+      }
+      setViewMode('BOARD_SETUP');
+    };
+
+    // 8. Number called listener
     const handleNumberCalled = (data: { room?: BackendPublicRoom }) => {
       soundManager.playNumberCall();
       if (data?.room && data.room.roomCode === room.roomCode) {
@@ -169,7 +187,7 @@ export function RoomLobbyView({
       }
     };
 
-    // 8. Game error listener
+    // 9. Game error listener
     const handleGameError = (data: { message?: string }) => {
       if (data?.message) {
         setStartError(data.message);
@@ -181,6 +199,7 @@ export function RoomLobbyView({
     socket.on('room:turn-order:updated', handleTurnOrderUpdated);
     socket.on('game:started', handleGameStarted);
     socket.on('game:state', handleGameState);
+    socket.on('game:rematch', handleGameRematch);
     socket.on('game:number:called', handleNumberCalled);
     socket.on('game:error', handleGameError);
 
@@ -198,6 +217,7 @@ export function RoomLobbyView({
       socket.off('room:turn-order:updated', handleTurnOrderUpdated);
       socket.off('game:started', handleGameStarted);
       socket.off('game:state', handleGameState);
+      socket.off('game:rematch', handleGameRematch);
       socket.off('game:number:called', handleNumberCalled);
       socket.off('game:error', handleGameError);
     };

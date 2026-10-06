@@ -76,6 +76,13 @@ export interface RoundRecord {
   callHistory: CallRecord[];
 }
 
+export interface PlayerRanking {
+  playerId: string;
+  playerName: string;
+  rank: number;
+  finishedAt: string;
+}
+
 export interface GameState {
   status: GameStatus;
   startedAt: string | null;
@@ -93,6 +100,10 @@ export interface GameState {
   lastCalledNumbers: CallRecord[];
   winnerId: string | null;
   winnerName?: string | null;
+  loserId?: string | null;
+  loserName?: string | null;
+  rankings?: PlayerRanking[];
+  finishedPlayerIds?: string[];
   winningNumber?: number | null;
   wonAt?: string | null;
   winningWord: string;

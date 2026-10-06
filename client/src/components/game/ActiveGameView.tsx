@@ -15,6 +15,7 @@ import {
   X,
   CheckCircle2,
   DoorClosed,
+  Hash,
 } from 'lucide-react';
 import { Room, Player, GameState } from '../../types';
 import { BingoBoard } from '../board/BingoBoard';
@@ -53,6 +54,7 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
   const [callError, setCallError] = useState<string | null>(null);
   const [isRestartingMatch, setIsRestartingMatch] = useState(false);
   const [socketStatus, setSocketStatus] = useState<SocketConnectionStatus>('CONNECTED');
+  const [mobileView, setMobileView] = useState<'both' | 'board' | 'numbers'>('both');
 
   // Real-time letter achievement popup for all players
   interface LetterAchievement {
@@ -141,27 +143,31 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
       const prevCount = prevPlayersLettersRef.current[p.id] ?? currentCount;
 
       if (currentCount > prevCount) {
-        const newlyEarnedLetter =
-          p.earnedLetters?.[currentCount - 1] || word[currentCount - 1] || '';
-        const isYou = p.id === currentPlayer.id;
-
         soundManager.playLineCompleted();
 
-        setLetterAchievement({
-          id: `${p.id}-${currentCount}-${Date.now()}`,
-          playerName: p.name,
-          isYou,
-          letter: newlyEarnedLetter,
-          progress: currentCount,
-          total: word.length,
-        });
+        // ONLY trigger celebration pop-up when ALL letters of the winning word are completed!
+        // Intermediate lines will NOT pop up or block the mobile screen/board.
+        if (currentCount >= word.length && prevCount < word.length) {
+          const isYou = p.id === currentPlayer.id;
 
-        const timer = setTimeout(() => {
-          setLetterAchievement(null);
-        }, 5000);
+          setLetterAchievement({
+            id: `${p.id}-${currentCount}-${Date.now()}`,
+            playerName: p.name,
+            isYou,
+            letter: word,
+            progress: word.length,
+            total: word.length,
+          });
 
-        prevPlayersLettersRef.current[p.id] = currentCount;
-        return () => clearTimeout(timer);
+          const timer = setTimeout(() => {
+            setLetterAchievement(null);
+          }, 6000);
+
+          prevPlayersLettersRef.current[p.id] = currentCount;
+          return () => clearTimeout(timer);
+        } else {
+          prevPlayersLettersRef.current[p.id] = currentCount;
+        }
       } else {
         prevPlayersLettersRef.current[p.id] = currentCount;
       }
@@ -224,6 +230,13 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
       }
     };
 
+    const handleGameRematch = (data: { room?: BackendPublicRoom }) => {
+      soundManager.playNewRound();
+      if (data?.room && data.room.roomCode === room.roomCode) {
+        setRoom(mapBackendRoomToClient(data.room));
+      }
+    };
+
     const handleGameEnded = () => {
       navigate(`/results/${room.roomCode}`);
     };
@@ -264,6 +277,7 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     socket.on('game:no_winner', handleGameNoWinner);
     socket.on('game:started', handleGameStarted);
     socket.on('game:continued', handleGameContinued);
+    socket.on('game:rematch', handleGameRematch);
     socket.on('game:ended', handleGameEnded);
     socket.on('room:closed', handleRoomClosed);
     socket.on('game:error', handleGameError);
@@ -277,6 +291,7 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
       socket.off('game:no_winner', handleGameNoWinner);
       socket.off('game:started', handleGameStarted);
       socket.off('game:continued', handleGameContinued);
+      socket.off('game:rematch', handleGameRematch);
       socket.off('game:ended', handleGameEnded);
       socket.off('room:closed', handleRoomClosed);
       socket.off('game:error', handleGameError);
@@ -515,6 +530,9 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
                 }
               : null
           }
+          loserId={game?.loserId}
+          loserName={game?.loserName}
+          rankings={game?.rankings}
           winningWord={winningWord}
           gridSize={gridSize}
           totalCalls={calledNumbers.length}
@@ -637,27 +655,27 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
               <div className="flex items-center gap-3 min-w-0">
                 {/* Glowing Unlocked Letter Tile */}
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 border-2 border-yellow-200 text-slate-950 font-mono font-black text-2xl flex items-center justify-center shadow-[0_0_20px_rgba(251,191,36,0.85)] shrink-0 animate-bounce">
-                  {letterAchievement.letter}
+                  🏆
                 </div>
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-amber-300">
                     <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-spin" />
-                    <span>TARGET LETTER COMPLETED!</span>
+                    <span>BINGO COMPLETED!</span>
                   </div>
                   <div className="text-sm font-extrabold text-white truncate mt-0.5">
                     {letterAchievement.isYou ? (
                       <span className="text-transparent bg-clip-text bg-gradient-to-r from-arcade-magenta via-fuchsia-300 to-amber-300">
-                        You completed a line and unlocked letter &ldquo;{letterAchievement.letter}&rdquo;!
+                        🎉 You completed all letters of &ldquo;{winningWord}&rdquo;!
                       </span>
                     ) : (
                       <span>
-                        <strong className="text-arcade-gold">{letterAchievement.playerName}</strong> has unlocked letter &ldquo;{letterAchievement.letter}&rdquo;!
+                        <strong className="text-arcade-gold">{letterAchievement.playerName}</strong> completed &ldquo;{winningWord}&rdquo;!
                       </span>
                     )}
                   </div>
                   <div className="text-[11px] font-mono text-slate-300 mt-0.5">
-                    Winning progress: <span className="text-arcade-gold font-bold">{letterAchievement.progress} / {letterAchievement.total}</span> letters
+                    Finished all <span className="text-arcade-gold font-bold">{letterAchievement.total}</span> letters!
                   </div>
                 </div>
               </div>
@@ -784,11 +802,88 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
       {/* 2. COMPACT RECENT CALLS STRIP */}
       <RecentCallsList lastCalledNumbers={game?.lastCalledNumbers || []} compact={true} />
 
+      {/* FINISHED PLAYER WAITING BANNER (Only One Loser Game Logic) */}
+      {Boolean(game?.finishedPlayerIds?.includes(currentPlayer.id)) && !isGameOver && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-500/20 via-teal-500/15 to-arcade-card border-2 border-emerald-400/60 shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center justify-between gap-3 flex-wrap"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400 text-emerald-300 flex items-center justify-center font-black text-base">
+              #{game?.rankings?.find((r) => r.playerId === currentPlayer.id)?.rank || 1}
+            </div>
+            <div>
+              <div className="text-xs sm:text-sm font-black text-emerald-300 flex items-center gap-1.5 uppercase">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>You Completed All Letters! (Rank #{game?.rankings?.find((r) => r.playerId === currentPlayer.id)?.rank || 1})</span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                You are safe! Waiting while remaining contenders play until the loser is determined.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-emerald-500/30 border border-emerald-400 text-emerald-200 text-xs font-black uppercase tracking-wider">
+            SAFE ✓
+          </span>
+        </motion.div>
+      )}
+
+      {/* MOBILE SCREEN SWITCHER CONTROLS (Only on screens below lg) */}
+      <div className="lg:hidden flex items-center justify-between gap-1 p-1 bg-arcade-surface/90 border border-arcade-border rounded-2xl shadow-sm">
+        <button
+          type="button"
+          onClick={() => setMobileView('both')}
+          className={`flex-1 py-2 px-1 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 ${
+            mobileView === 'both'
+              ? 'bg-gradient-to-r from-arcade-purple to-arcade-magenta text-white shadow-neon-purple'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-arcade-gold" />
+          <span>⚡ Both Views</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMobileView('board')}
+          className={`flex-1 py-2 px-1 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 ${
+            mobileView === 'board'
+              ? 'bg-gradient-to-r from-arcade-purple to-arcade-magenta text-white shadow-neon-purple'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+          <span>🎯 Board ({gridSize}×{gridSize})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMobileView('numbers')}
+          className={`flex-1 py-2 px-1 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 relative ${
+            mobileView === 'numbers'
+              ? 'bg-gradient-to-r from-arcade-purple to-arcade-magenta text-white shadow-neon-purple'
+              : isMyTurn && !game?.finishedPlayerIds?.includes(currentPlayer.id)
+              ? 'text-fuchsia-300 animate-pulse bg-arcade-magenta/25 border border-arcade-magenta/50'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Hash className="w-3.5 h-3.5 text-arcade-gold" />
+          <span>🔢 Call Number</span>
+          {isMyTurn && !game?.finishedPlayerIds?.includes(currentPlayer.id) && (
+            <span className="w-2 h-2 rounded-full bg-arcade-gold animate-ping" />
+          )}
+        </button>
+      </div>
+
       {/* 3. MAIN ARENA: SIDE-BY-SIDE BOARD & NUMBER SELECTOR */}
-      {/* Box beside Box layout requested: No scrolling required on laptops */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6 items-start">
         {/* LEFT BOX: YOUR BOARD (N×N) */}
-        <div className="rounded-3xl bg-arcade-card/90 border-2 border-arcade-border p-4 sm:p-5 shadow-arcade-card space-y-3 flex flex-col justify-between">
+        <div
+          className={`rounded-3xl bg-arcade-card/90 border-2 border-arcade-border p-3 sm:p-5 shadow-arcade-card space-y-3 flex flex-col justify-between ${
+            mobileView === 'numbers' ? 'hidden lg:flex' : 'flex'
+          }`}
+        >
           <div className="flex items-center justify-between text-xs pb-2.5 border-b border-arcade-border/80">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -824,12 +919,25 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
         </div>
 
         {/* RIGHT BOX: NUMBER SELECTOR (N² NUMBERS) */}
-        {/* Positioned right beside the board for instant selection without scrolling */}
-        <div className="h-full">
+        <div className={`h-full ${mobileView === 'board' ? 'hidden lg:block' : 'block'}`}>
+          {/* Quick Return to Board link on mobile when in numbers view */}
+          {mobileView === 'numbers' && (
+            <div className="lg:hidden flex justify-end pb-1.5">
+              <button
+                type="button"
+                onClick={() => setMobileView('board')}
+                className="text-xs font-bold text-arcade-gold flex items-center gap-1 hover:underline"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Switch to My Board</span>
+              </button>
+            </div>
+          )}
+
           <NumberCallerGrid
             gridSize={gridSize}
             calledNumbers={calledNumbers}
-            isMyTurn={isMyTurn}
+            isMyTurn={isMyTurn && !game?.finishedPlayerIds?.includes(currentPlayer.id)}
             currentCallerName={currentTurnPlayer?.name || 'Active Player'}
             isProcessing={isCallingNumber}
             processingNumber={callingNumberVal}
@@ -843,6 +951,23 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
           />
         </div>
       </div>
+
+      {/* Floating Call Alert on Mobile when Viewing Board */}
+      {isMyTurn &&
+        !game?.finishedPlayerIds?.includes(currentPlayer.id) &&
+        mobileView === 'board' &&
+        !isGameOver && (
+          <div className="lg:hidden sticky bottom-4 z-40 px-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setMobileView('numbers')}
+              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-arcade-magenta via-fuchsia-500 to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-[0_0_25px_rgba(217,70,239,0.7)] flex items-center justify-center gap-2 animate-bounce"
+            >
+              <Sparkles className="w-4 h-4 text-slate-950" />
+              <span>YOUR TURN TO CALL! Open Number Selector ➔</span>
+            </button>
+          </div>
+        )}
     </div>
   );
 }

@@ -13,8 +13,9 @@ import {
   DoorClosed,
   Clock,
   Users,
+  Skull,
 } from 'lucide-react';
-import { WinnerInfo, Player } from '../../types';
+import { WinnerInfo, Player, PlayerRanking } from '../../types';
 import { BingoBall3D } from '../three/BingoBall3D';
 
 interface WinnerModalProps {
@@ -28,6 +29,9 @@ interface WinnerModalProps {
     completedLines?: string[];
     earnedLetters?: string[];
   } | null;
+  loserId?: string | null;
+  loserName?: string | null;
+  rankings?: PlayerRanking[];
   winningWord: string;
   gridSize: number;
   totalCalls: number;
@@ -46,6 +50,9 @@ interface WinnerModalProps {
 export function WinnerModal({
   status,
   winner,
+  loserId,
+  loserName,
+  rankings = [],
   winningWord = 'BINGO',
   gridSize,
   totalCalls,
@@ -250,18 +257,39 @@ export function WinnerModal({
           </div>
         </div>
 
-        {/* Players Progress Summary (helpful especially on No Winner or multiple players) */}
+        {/* DESIGNATED SINGLE LOSER HIGHLIGHT */}
+        {loserName && (
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-950/60 via-slate-900 to-rose-950/60 border-2 border-rose-500/60 text-center space-y-1 shadow-[0_0_20px_rgba(244,63,94,0.3)]">
+            <div className="flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-300">
+              <Skull className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+              <span>THE ONLY LOSER OF THIS MATCH</span>
+            </div>
+            <div className="text-base font-black text-rose-200">
+              {loserName}
+            </div>
+            <p className="text-[10px] text-slate-400">
+              Last remaining contender who could not complete the letters before all other players!
+            </p>
+          </div>
+        )}
+
+        {/* Players Progress Summary (Rankings & Standings) */}
         {players.length > 0 && (
           <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 text-left space-y-2 max-h-36 overflow-y-auto">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-              <Users className="w-3 h-3 text-arcade-purple" />
-              <span>Contenders Standings</span>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Users className="w-3 h-3 text-arcade-purple" />
+                <span>Contenders Standings</span>
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono">1 Winner • 1 Loser</span>
             </div>
             <div className="space-y-1">
               {players.map((p) => {
                 const earned = p.earnedLetters || [];
                 const lines = p.completedLineCount || (p.completedLines ? p.completedLines.length : 0);
                 const isThisWinner = isWon && p.id === winner?.playerId;
+                const isThisLoser = loserId ? p.id === loserId : false;
+                const rankObj = rankings.find((r) => r.playerId === p.id);
 
                 return (
                   <div
@@ -269,15 +297,29 @@ export function WinnerModal({
                     className={`flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg border ${
                       isThisWinner
                         ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 font-bold'
+                        : isThisLoser
+                        ? 'bg-rose-500/15 border-rose-500/50 text-rose-300 font-bold'
                         : 'bg-slate-900/60 border-slate-800 text-slate-300'
                     }`}
                   >
                     <span className="truncate max-w-[140px] flex items-center gap-1.5">
-                      {isThisWinner && <Crown className="w-3 h-3 text-arcade-gold" />}
+                      {isThisWinner && <Crown className="w-3 h-3 text-arcade-gold shrink-0" />}
+                      {isThisLoser && <Skull className="w-3 h-3 text-rose-400 shrink-0" />}
+                      {rankObj && !isThisWinner && !isThisLoser && (
+                        <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[9px] font-bold">
+                          #{rankObj.rank}
+                        </span>
+                      )}
                       <span>{p.name} {p.isHost ? '(Host)' : ''}</span>
                     </span>
                     <span className="font-mono text-[11px] text-slate-400">
-                      {targetLetters.map((l) => (earned.includes(l) ? l : '_')).join(' ')}
+                      {isThisLoser ? (
+                        <span className="text-rose-400 font-black tracking-wider uppercase text-[10px]">LOSER</span>
+                      ) : isThisWinner ? (
+                        <span className="text-amber-300 font-black tracking-wider uppercase text-[10px]">WINNER</span>
+                      ) : (
+                        targetLetters.map((l) => (earned.includes(l) ? l : '_')).join(' ')
+                      )}
                       <span className="ml-2 text-slate-500">({lines} {lines === 1 ? 'line' : 'lines'})</span>
                     </span>
                   </div>
