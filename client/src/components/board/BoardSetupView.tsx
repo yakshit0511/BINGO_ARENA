@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   RotateCcw,
@@ -36,20 +36,24 @@ export function BoardSetupView({
   const gridSize = initialRoom.config.gridSize;
   const totalNumbers = gridSize * gridSize;
 
+  const prevRoundRef = useRef<number>(initialRoom.game?.roundNumber || 1);
+
   useEffect(() => {
     setRoom(initialRoom);
+    const currentRound = initialRoom.game?.roundNumber || 1;
+    // Only reset cells if a brand-new round was launched
+    if (currentRound > prevRoundRef.current) {
+      prevRoundRef.current = currentRound;
+      setIsSubmitted(false);
+      setCells(new Array(totalNumbers).fill(null));
+      setPlacementHistory([]);
+      return;
+    }
+
     const me = initialRoom.players.find((p) => p.id === currentPlayer.id);
-    if (me) {
-      if (!me.hasSubmitted) {
-        setIsSubmitted(false);
-        if (!me.board || me.board.length === 0) {
-          setCells(new Array(totalNumbers).fill(null));
-          setPlacementHistory([]);
-        }
-      } else if (me.hasSubmitted && me.board && me.board.length === totalNumbers) {
-        setIsSubmitted(true);
-        setCells(me.board);
-      }
+    if (me?.hasSubmitted && me.board && me.board.length === totalNumbers) {
+      setIsSubmitted(true);
+      setCells(me.board);
     }
   }, [initialRoom, currentPlayer.id, totalNumbers]);
 
@@ -95,14 +99,9 @@ export function BoardSetupView({
 
         // Update local submission state based on server-reported state
         const me = mapped.players.find((p) => p.id === currentPlayer.id);
-        if (me?.hasSubmitted) {
+        if (me?.hasSubmitted && me.board && me.board.length === totalNumbers) {
           setIsSubmitted(true);
-        } else if (me && !me.hasSubmitted) {
-          setIsSubmitted(false);
-          if (!me.board || me.board.length === 0) {
-            setCells(new Array(totalNumbers).fill(null));
-            setPlacementHistory([]);
-          }
+          setCells(me.board);
         }
       }
     };
