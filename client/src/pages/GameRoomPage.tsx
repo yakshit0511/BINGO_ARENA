@@ -38,13 +38,19 @@ export function GameRoomPage() {
         return;
       }
 
+      // If URL didn't have roomCode, normalize URL so refresh keeps the user here
+      if (!paramCode && session?.roomCode) {
+        navigate(`/game/${session.roomCode}`, { replace: true });
+      }
+
       try {
         const res = await roomService.getRoom(targetCode);
         if (res.success && res.data) {
           setCurrentRoom(res.data);
           const matchedPlayer = session?.playerId
             ? res.data.players.find((p) => p.id === session.playerId)
-            : res.data.players[0];
+            : res.data.players.find((p) => p.name.toLowerCase() === session?.playerName?.toLowerCase()) ||
+              res.data.players[0];
           if (matchedPlayer) {
             setCurrentPlayer(matchedPlayer);
           } else if (res.data.players.length > 0) {
@@ -59,7 +65,7 @@ export function GameRoomPage() {
     }
 
     loadRoom();
-  }, [paramCode]);
+  }, [paramCode, navigate]);
 
   // Real-time synchronization at GameRoomPage root
   useEffect(() => {
@@ -101,6 +107,20 @@ export function GameRoomPage() {
       socket.off('room:closed', handleRoomClosed);
     };
   }, [currentRoom?.roomCode, currentPlayer?.id]);
+
+  // Periodic heartbeat polling as guaranteed fallback when socket drops/reconnects
+  useEffect(() => {
+    if (!currentRoom?.roomCode) return;
+    const interval = setInterval(() => {
+      roomService.getRoom(currentRoom.roomCode).then((res) => {
+        if (res.success && res.data) {
+          setCurrentRoom(res.data);
+        }
+      }).catch(() => {});
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [currentRoom?.roomCode]);
 
   // Keep currentPlayer synchronized with currentRoom updates
   useEffect(() => {

@@ -35,7 +35,7 @@ import {
   endGameSocket,
   closeRoomSocket,
 } from '../../lib/socket';
-import { mapBackendRoomToClient, BackendPublicRoom } from '../../lib/roomService';
+import { roomService, mapBackendRoomToClient, BackendPublicRoom } from '../../lib/roomService';
 import { clearPlayerSession } from '../../lib/session';
 
 interface ActiveGameViewProps {
@@ -283,6 +283,19 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     };
   }, [room.roomCode, currentPlayer.id]);
 
+  // Guaranteed polling heartbeat: keeps game state synchronized even if socket drops
+  useEffect(() => {
+    const interval = setInterval(() => {
+      roomService.getRoom(room.roomCode).then((res) => {
+        if (res.success && res.data) {
+          setRoom(res.data);
+        }
+      }).catch(() => {});
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [room.roomCode]);
+
   // Handler for caller selecting a number from the grid
   const handleCallNumber = async (num: number) => {
     if (isGameOver || !isMyTurn || isCallingNumber) return;
@@ -292,22 +305,33 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     setCallError(null);
 
     try {
-      const res = await callNumberSocket(room.roomCode, currentPlayer.id, num);
+      // 1. Attempt via Socket.IO
+      let res = await callNumberSocket(room.roomCode, currentPlayer.id, num);
+
+      // 2. If Socket timed out or failed, fallback to REST API
       if (!res.success) {
-        setCallError(res.message || 'Failed to call number.');
-        setIsCallingNumber(false);
-        setCallingNumberVal(null);
-      } else {
-        soundManager.playNumberCall();
-        if (res.room) {
-          setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
+        console.warn('[ActiveGameView] Socket callNumber failed or timed out, trying REST fallback:', res.message);
+        const restRes = await roomService.callNumber(room.roomCode, currentPlayer.id, num);
+        if (restRes.success && restRes.data) {
+          res = {
+            success: true,
+            room: restRes.data.room,
+            game: restRes.data.game,
+          };
+        } else {
+          setCallError(restRes.message || res.message || 'Failed to call number.');
+          return;
         }
-        setIsCallingNumber(false);
-        setCallingNumberVal(null);
+      }
+
+      soundManager.playNumberCall();
+      if (res.room) {
+        setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Network error calling number';
       setCallError(msg);
+    } finally {
       setIsCallingNumber(false);
       setCallingNumberVal(null);
     }
@@ -320,10 +344,18 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     setCallError(null);
 
     try {
-      const res = await restartGameSocket(room.roomCode, currentPlayer.id);
+      let res = await restartGameSocket(room.roomCode, currentPlayer.id);
       if (!res.success) {
-        setCallError(res.message || 'Failed to restart match.');
-      } else if (res.room) {
+        const restRes = await roomService.restartGame(room.roomCode, currentPlayer.id);
+        if (restRes.success && restRes.data) {
+          res = { success: true, room: restRes.data.room };
+        } else {
+          setCallError(restRes.message || res.message || 'Failed to restart match.');
+          return;
+        }
+      }
+
+      if (res.room) {
         soundManager.playNewRound();
         setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
       }
@@ -342,10 +374,18 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     setCallError(null);
 
     try {
-      const res = await continueGameSocket(room.roomCode, currentPlayer.id);
+      let res = await continueGameSocket(room.roomCode, currentPlayer.id);
       if (!res.success) {
-        setCallError(res.message || 'Failed to start next round.');
-      } else if (res.room) {
+        const restRes = await roomService.continueGame(room.roomCode, currentPlayer.id);
+        if (restRes.success && restRes.data) {
+          res = { success: true, room: restRes.data.room };
+        } else {
+          setCallError(restRes.message || res.message || 'Failed to start next round.');
+          return;
+        }
+      }
+
+      if (res.room) {
         soundManager.playNewRound();
         setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
       }
@@ -364,12 +404,17 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     setCallError(null);
 
     try {
-      const res = await endGameSocket(room.roomCode, currentPlayer.id);
+      let res = await endGameSocket(room.roomCode, currentPlayer.id);
       if (!res.success) {
-        setCallError(res.message || 'Failed to end match.');
-      } else {
-        navigate(`/results/${room.roomCode}`);
+        const restRes = await roomService.endGame(room.roomCode, currentPlayer.id);
+        if (restRes.success) {
+          res = { success: true };
+        } else {
+          setCallError(restRes.message || res.message || 'Failed to end match.');
+          return;
+        }
       }
+      navigate(`/results/${room.roomCode}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error ending match.';
       setCallError(msg);
@@ -385,13 +430,18 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     setCallError(null);
 
     try {
-      const res = await closeRoomSocket(room.roomCode, currentPlayer.id);
+      let res = await closeRoomSocket(room.roomCode, currentPlayer.id);
       if (!res.success) {
-        setCallError(res.message || 'Failed to close room.');
-      } else {
-        soundManager.playRoomClosed();
-        setRoom((prev) => ({ ...prev, status: 'closed' }));
+        const restRes = await roomService.closeRoom(room.roomCode, currentPlayer.id);
+        if (restRes.success) {
+          res = { success: true };
+        } else {
+          setCallError(restRes.message || res.message || 'Failed to close room.');
+          return;
+        }
       }
+      soundManager.playRoomClosed();
+      setRoom((prev) => ({ ...prev, status: 'closed' }));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error closing room.';
       setCallError(msg);

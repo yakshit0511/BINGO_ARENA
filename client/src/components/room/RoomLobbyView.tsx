@@ -182,6 +182,19 @@ export function RoomLobbyView({
     };
   }, [room.roomCode, currentPlayer.id]);
 
+  // Guaranteed polling fallback: refreshes room state every 2.5s so board submissions and new joins sync automatically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      roomService.getRoom(room.roomCode).then((res) => {
+        if (res.success && res.data) {
+          setRoom(res.data);
+        }
+      }).catch(() => {});
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [room.roomCode]);
+
   const handleTurnOrderChange = async (newOrder: string[]) => {
     setConfiguredTurnOrder(newOrder);
     setStartError(null);

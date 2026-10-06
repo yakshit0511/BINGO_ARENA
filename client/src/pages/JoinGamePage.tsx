@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   KeyRound,
@@ -16,6 +16,7 @@ import { PageTransition } from '../components/layout/PageTransition';
 import { RoomLobbyView } from '../components/room/RoomLobbyView';
 
 export function JoinGamePage() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   // Form State
@@ -69,6 +70,7 @@ export function JoinGamePage() {
       if (response.success && response.data) {
         setJoinedRoom(response.data.room);
         setJoinedPlayer(response.data.player);
+        navigate(`/game/${response.data.room.roomCode}`);
       } else {
         setErrorMessage(response.message || 'Unable to join arena room.');
       }

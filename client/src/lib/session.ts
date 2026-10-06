@@ -1,7 +1,7 @@
 /**
  * Player Session Storage Manager
- * Stores temporary browser-session game identity in sessionStorage.
- * Does not store sensitive secrets.
+ * Stores browser-session game identity across reloads and navigation.
+ * Uses both sessionStorage and localStorage for resilience across hard refreshes.
  */
 
 const STORAGE_KEYS = {
@@ -19,39 +19,54 @@ export interface PlayerSession {
 }
 
 /**
- * Persist current player session to sessionStorage.
+ * Persist current player session to storage.
  */
 export function savePlayerSession(session: PlayerSession): void {
   try {
-    sessionStorage.setItem(STORAGE_KEYS.ROOM_CODE, session.roomCode.toUpperCase());
+    const code = session.roomCode.trim().toUpperCase();
+    sessionStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
     sessionStorage.setItem(STORAGE_KEYS.PLAYER_ID, session.playerId);
     sessionStorage.setItem(STORAGE_KEYS.PLAYER_NAME, session.playerName);
     sessionStorage.setItem(STORAGE_KEYS.IS_HOST, String(session.isHost));
+
+    localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
+    localStorage.setItem(STORAGE_KEYS.PLAYER_ID, session.playerId);
+    localStorage.setItem(STORAGE_KEYS.PLAYER_NAME, session.playerName);
+    localStorage.setItem(STORAGE_KEYS.IS_HOST, String(session.isHost));
   } catch (err) {
-    console.warn('Failed to save session to sessionStorage:', err);
+    console.warn('Failed to save session:', err);
   }
 }
 
 /**
- * Retrieve current player session from sessionStorage if available.
+ * Retrieve current player session from sessionStorage or localStorage.
  */
 export function getPlayerSession(): PlayerSession | null {
   try {
-    const roomCode = sessionStorage.getItem(STORAGE_KEYS.ROOM_CODE);
-    const playerId = sessionStorage.getItem(STORAGE_KEYS.PLAYER_ID);
-    const playerName = sessionStorage.getItem(STORAGE_KEYS.PLAYER_NAME);
-    const isHost = sessionStorage.getItem(STORAGE_KEYS.IS_HOST) === 'true';
+    const roomCode =
+      sessionStorage.getItem(STORAGE_KEYS.ROOM_CODE) ||
+      localStorage.getItem(STORAGE_KEYS.ROOM_CODE);
+    const playerId =
+      sessionStorage.getItem(STORAGE_KEYS.PLAYER_ID) ||
+      localStorage.getItem(STORAGE_KEYS.PLAYER_ID);
+    const playerName =
+      sessionStorage.getItem(STORAGE_KEYS.PLAYER_NAME) ||
+      localStorage.getItem(STORAGE_KEYS.PLAYER_NAME);
+    const isHostVal =
+      sessionStorage.getItem(STORAGE_KEYS.IS_HOST) ||
+      localStorage.getItem(STORAGE_KEYS.IS_HOST);
+    const isHost = isHostVal === 'true';
 
     if (roomCode && playerId && playerName) {
       return {
-        roomCode,
-        playerId,
-        playerName,
+        roomCode: roomCode.trim().toUpperCase(),
+        playerId: playerId.trim(),
+        playerName: playerName.trim(),
         isHost,
       };
     }
   } catch (err) {
-    console.warn('Failed to retrieve session from sessionStorage:', err);
+    console.warn('Failed to retrieve session:', err);
   }
   return null;
 }
@@ -65,7 +80,12 @@ export function clearPlayerSession(): void {
     sessionStorage.removeItem(STORAGE_KEYS.PLAYER_ID);
     sessionStorage.removeItem(STORAGE_KEYS.PLAYER_NAME);
     sessionStorage.removeItem(STORAGE_KEYS.IS_HOST);
+
+    localStorage.removeItem(STORAGE_KEYS.ROOM_CODE);
+    localStorage.removeItem(STORAGE_KEYS.PLAYER_ID);
+    localStorage.removeItem(STORAGE_KEYS.PLAYER_NAME);
+    localStorage.removeItem(STORAGE_KEYS.IS_HOST);
   } catch (err) {
-    console.warn('Failed to clear sessionStorage:', err);
+    console.warn('Failed to clear storage session:', err);
   }
 }

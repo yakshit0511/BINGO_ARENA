@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Sparkles,
@@ -28,6 +28,7 @@ import { DynamicGridPreview } from '../components/room/DynamicGridPreview';
 import { RoomLobbyView } from '../components/room/RoomLobbyView';
 
 export function CreateGamePage() {
+  const navigate = useNavigate();
   // Form State
   const [hostName, setHostName] = useState('');
   const [gridSize, setGridSize] = useState<number>(5);
@@ -108,6 +109,7 @@ export function CreateGamePage() {
       if (response.success && response.data) {
         setCreatedRoom(response.data);
         setHostPlayer(response.data.players[0]);
+        navigate(`/game/${response.data.roomCode}`);
       } else {
         setErrorMessage(response.message || 'Failed to create room on server.');
       }

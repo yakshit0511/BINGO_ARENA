@@ -49,12 +49,25 @@ export const WORD_SUGGESTIONS_BY_SIZE: Record<number, string[]> = {
   20: ['ELECTROENCEPHALOGRAMS'],
 };
 
-const rawApiUrl =
-  import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD
-    ? 'https://bingo-arena-92ne.onrender.com'
-    : 'http://localhost:5001');
+function resolveApiUrl(): string {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+    if (!isLocal) {
+      const envUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
+      if (envUrl && envUrl.startsWith('https://')) {
+        return envUrl.replace(/\/+$/, '');
+      }
+      return 'https://bingo-arena-92ne.onrender.com';
+    }
+  }
 
-export const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
+  const raw =
+    import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_API_URL ||
+    'https://bingo-arena-92ne.onrender.com';
+  return raw.replace(/\/+$/, '');
+}
+
+export const API_BASE_URL = resolveApiUrl();
 

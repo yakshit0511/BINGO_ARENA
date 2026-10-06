@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Room, Player } from '../../types';
 import { roomService, BackendPublicRoom, mapBackendRoomToClient } from '../../lib/roomService';
-import { getSocket, joinRoomSocket } from '../../lib/socket';
+import { getSocket, joinRoomSocket, submitBoardSocket } from '../../lib/socket';
 import { Button } from '../ui/Button';
 import { TiltCard } from '../ui/TiltCard';
 import { BingoBoard } from './BingoBoard';
@@ -111,6 +111,20 @@ export function BoardSetupView({
     };
   }, [room.roomCode, currentPlayer.id, currentPlayer.hasSubmitted, totalNumbers]);
 
+  // Guaranteed polling fallback during board setup to keep all player statuses synchronized
+  useEffect(() => {
+    const interval = setInterval(() => {
+      roomService.getRoom(room.roomCode).then((res) => {
+        if (res.success && res.data) {
+          setRoom(res.data);
+          onRoomUpdate?.(res.data);
+        }
+      }).catch(() => {});
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [room.roomCode, onRoomUpdate]);
+
   // Click empty cell to place next sequential number
   const handleCellClick = (index: number) => {
     if (isSubmitted || cells[index] !== null || nextNumber === null) {
@@ -155,6 +169,9 @@ export function BoardSetupView({
     setErrorMessage(null);
 
     try {
+      // Fire socket event for instant real-time broadcast
+      submitBoardSocket(room.roomCode, currentPlayer.id, cells as number[]).catch(() => {});
+
       const response = await roomService.submitBoard(
         room.roomCode,
         currentPlayer.id,

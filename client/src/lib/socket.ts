@@ -1,14 +1,30 @@
 import { io, Socket } from 'socket.io-client';
 
-const rawSocketUrl =
-  import.meta.env.VITE_SOCKET_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD
-    ? 'https://bingo-arena-92ne.onrender.com'
-    : 'http://localhost:5001');
+function resolveSocketUrl(): string {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+    if (!isLocal) {
+      const envUrl =
+        import.meta.env.VITE_SOCKET_URL ||
+        import.meta.env.VITE_API_BASE_URL ||
+        import.meta.env.VITE_API_URL;
+      if (envUrl && envUrl.startsWith('https://')) {
+        return envUrl.replace(/\/+$/, '');
+      }
+      return 'https://bingo-arena-92ne.onrender.com';
+    }
+  }
 
-const SERVER_URL = rawSocketUrl.replace(/\/+$/, '');
+  const raw =
+    import.meta.env.VITE_SOCKET_URL ||
+    import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_API_URL ||
+    'https://bingo-arena-92ne.onrender.com';
+  return raw.replace(/\/+$/, '');
+}
+
+const SERVER_URL = resolveSocketUrl();
 
 export type SocketConnectionStatus =
   | 'CONNECTING'
@@ -28,6 +44,39 @@ function updateStatus(newStatus: SocketConnectionStatus) {
 }
 
 /**
+ * Helper to emit a socket event with a guaranteed timeout
+ */
+function emitWithTimeout<T>(
+  socket: Socket,
+  event: string,
+  payload: any,
+  timeoutMs = 3500,
+  defaultError = 'Request timed out.'
+): Promise<T> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve({ success: false, message: defaultError } as unknown as T);
+      }
+    }, timeoutMs);
+
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    socket.emit(event, payload, (res: T) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve(res || ({ success: false, message: 'No response from server.' } as unknown as T));
+      }
+    });
+  });
+}
+
+/**
  * Get or initialize the managed singleton Socket.IO connection.
  */
 export function getSocket(): Socket {
@@ -37,16 +86,16 @@ export function getSocket(): Socket {
     socketInstance = io(SERVER_URL, {
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 20,
+      reconnectionAttempts: 25,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 15000,
-      transports: ['polling', 'websocket'],
-      withCredentials: true,
+      transports: ['websocket', 'polling'],
+      withCredentials: false,
     });
 
     socketInstance.on('connect', () => {
-      console.log(`[Socket.IO Client] Connected to server (id: ${socketInstance?.id})`);
+      console.log(`[Socket.IO Client] Connected to server (id: ${socketInstance?.id}) at ${SERVER_URL}`);
       updateStatus('CONNECTED');
     });
 
@@ -106,21 +155,12 @@ export function joinRoomSocket(
   playerId: string
 ): Promise<{ success: boolean; message?: string; room?: any }> {
   const socket = getSocket();
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    playerId: playerId.trim(),
+  };
 
-  return new Promise((resolve) => {
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    const payload = {
-      roomCode: roomCode.trim().toUpperCase(),
-      playerId: playerId.trim(),
-    };
-
-    socket.emit('room:join', payload, (res: { success: boolean; message?: string; room?: any }) => {
-      resolve(res || { success: false, message: 'No response from server.' });
-    });
-  });
+  return emitWithTimeout(socket, 'room:join', payload, 3500, 'Join room socket timed out.');
 }
 
 /**
@@ -131,22 +171,34 @@ export function leaveRoomSocket(
   playerId: string
 ): Promise<{ success: boolean; message?: string }> {
   const socket = getSocket();
+  if (!socket.connected) {
+    return Promise.resolve({ success: true });
+  }
 
-  return new Promise((resolve) => {
-    if (!socket.connected) {
-      resolve({ success: true });
-      return;
-    }
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    playerId: playerId.trim(),
+  };
 
-    const payload = {
-      roomCode: roomCode.trim().toUpperCase(),
-      playerId: playerId.trim(),
-    };
+  return emitWithTimeout(socket, 'room:leave', payload, 2500, 'Leave room socket timed out.');
+}
 
-    socket.emit('room:leave', payload, (res: { success: boolean; message?: string }) => {
-      resolve(res || { success: true });
-    });
-  });
+/**
+ * Submit player bingo board via socket.
+ */
+export function submitBoardSocket(
+  roomCode: string,
+  playerId: string,
+  cells: number[]
+): Promise<{ success: boolean; message?: string; room?: unknown }> {
+  const socket = getSocket();
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    playerId: playerId.trim(),
+    cells,
+  };
+
+  return emitWithTimeout(socket, 'board:submit', payload, 3500, 'Board submit socket timed out.');
 }
 
 /**
@@ -158,22 +210,13 @@ export function updateTurnOrderSocket(
   playerOrder: string[]
 ): Promise<{ success: boolean; message?: string; room?: unknown }> {
   const socket = getSocket();
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    playerId: playerId.trim(),
+    playerOrder,
+  };
 
-  return new Promise((resolve) => {
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    const payload = {
-      roomCode: roomCode.trim().toUpperCase(),
-      playerId: playerId.trim(),
-      playerOrder,
-    };
-
-    socket.emit('room:turn-order:update', payload, (res: { success: boolean; message?: string; room?: unknown }) => {
-      resolve(res || { success: false, message: 'No response from server.' });
-    });
-  });
+  return emitWithTimeout(socket, 'room:turn-order:update', payload, 3500, 'Turn order socket timed out.');
 }
 
 /**
@@ -185,34 +228,13 @@ export function startGameSocket(
   playerOrder?: string[]
 ): Promise<{ success: boolean; message?: string; room?: unknown }> {
   const socket = getSocket();
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    playerId: playerId.trim(),
+    playerOrder,
+  };
 
-  return new Promise((resolve) => {
-    let resolved = false;
-    const timer = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        resolve({ success: false, message: 'Socket start timed out. Falling back to REST API...' });
-      }
-    }, 3500);
-
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    const payload = {
-      roomCode: roomCode.trim().toUpperCase(),
-      playerId: playerId.trim(),
-      playerOrder,
-    };
-
-    socket.emit('game:start', payload, (res: { success: boolean; message?: string; room?: unknown }) => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timer);
-        resolve(res || { success: false, message: 'No response from server.' });
-      }
-    });
-  });
+  return emitWithTimeout(socket, 'game:start', payload, 3500, 'Game start socket timed out.');
 }
 
 /**
@@ -224,26 +246,13 @@ export function callNumberSocket(
   number: number
 ): Promise<{ success: boolean; message?: string; game?: unknown; room?: unknown }> {
   const socket = getSocket();
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    playerId: playerId.trim(),
+    number,
+  };
 
-  return new Promise((resolve) => {
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    const payload = {
-      roomCode: roomCode.trim().toUpperCase(),
-      playerId: playerId.trim(),
-      number,
-    };
-
-    socket.emit(
-      'game:number:call',
-      payload,
-      (res: { success: boolean; message?: string; game?: unknown; room?: unknown }) => {
-        resolve(res || { success: false, message: 'No response from server.' });
-      }
-    );
-  });
+  return emitWithTimeout(socket, 'game:number:call', payload, 3500, 'Call number socket timed out.');
 }
 
 /**
@@ -253,20 +262,9 @@ export function requestGameStateSocket(
   roomCode: string
 ): Promise<{ success: boolean; message?: string; game?: unknown; room?: unknown }> {
   const socket = getSocket();
+  const payload = { roomCode: roomCode.trim().toUpperCase() };
 
-  return new Promise((resolve) => {
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    socket.emit(
-      'game:request-state',
-      { roomCode: roomCode.trim().toUpperCase() },
-      (res: { success: boolean; message?: string; game?: unknown; room?: unknown }) => {
-        resolve(res || { success: false, message: 'No response from server.' });
-      }
-    );
-  });
+  return emitWithTimeout(socket, 'game:request-state', payload, 3500, 'Request game state socket timed out.');
 }
 
 /**
@@ -277,25 +275,12 @@ export function restartGameSocket(
   playerId: string
 ): Promise<{ success: boolean; message?: string; room?: unknown }> {
   const socket = getSocket();
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    playerId: playerId.trim(),
+  };
 
-  return new Promise((resolve) => {
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    const payload = {
-      roomCode: roomCode.trim().toUpperCase(),
-      playerId: playerId.trim(),
-    };
-
-    socket.emit(
-      'game:restart',
-      payload,
-      (res: { success: boolean; message?: string; room?: unknown }) => {
-        resolve(res || { success: false, message: 'No response from server.' });
-      }
-    );
-  });
+  return emitWithTimeout(socket, 'game:restart', payload, 3500, 'Restart match socket timed out.');
 }
 
 /**
@@ -306,25 +291,12 @@ export function continueGameSocket(
   playerId: string
 ): Promise<{ success: boolean; message?: string; room?: unknown }> {
   const socket = getSocket();
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    playerId: playerId.trim(),
+  };
 
-  return new Promise((resolve) => {
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    const payload = {
-      roomCode: roomCode.trim().toUpperCase(),
-      playerId: playerId.trim(),
-    };
-
-    socket.emit(
-      'game:continue',
-      payload,
-      (res: { success: boolean; message?: string; room?: unknown }) => {
-        resolve(res || { success: false, message: 'No response from server.' });
-      }
-    );
-  });
+  return emitWithTimeout(socket, 'game:continue', payload, 3500, 'Continue match socket timed out.');
 }
 
 /**
@@ -335,25 +307,12 @@ export function endGameSocket(
   playerId: string
 ): Promise<{ success: boolean; message?: string; room?: unknown }> {
   const socket = getSocket();
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    playerId: playerId.trim(),
+  };
 
-  return new Promise((resolve) => {
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    const payload = {
-      roomCode: roomCode.trim().toUpperCase(),
-      playerId: playerId.trim(),
-    };
-
-    socket.emit(
-      'game:end',
-      payload,
-      (res: { success: boolean; message?: string; room?: unknown }) => {
-        resolve(res || { success: false, message: 'No response from server.' });
-      }
-    );
-  });
+  return emitWithTimeout(socket, 'game:end', payload, 3500, 'End game socket timed out.');
 }
 
 /**
@@ -364,25 +323,12 @@ export function closeRoomSocket(
   playerId: string
 ): Promise<{ success: boolean; message?: string; room?: unknown }> {
   const socket = getSocket();
+  const payload = {
+    roomCode: roomCode.trim().toUpperCase(),
+    playerId: playerId.trim(),
+  };
 
-  return new Promise((resolve) => {
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    const payload = {
-      roomCode: roomCode.trim().toUpperCase(),
-      playerId: playerId.trim(),
-    };
-
-    socket.emit(
-      'room:close',
-      payload,
-      (res: { success: boolean; message?: string; room?: unknown }) => {
-        resolve(res || { success: false, message: 'No response from server.' });
-      }
-    );
-  });
+  return emitWithTimeout(socket, 'room:close', payload, 3500, 'Close room socket timed out.');
 }
 
 /**
