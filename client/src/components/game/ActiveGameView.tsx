@@ -7,7 +7,6 @@ import {
   Sparkles,
   Clock,
   Radio,
-  ArrowRight,
   ShieldCheck,
   Trophy,
   Users,
@@ -52,9 +51,20 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
   const [isCallingNumber, setIsCallingNumber] = useState(false);
   const [callingNumberVal, setCallingNumberVal] = useState<number | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
-  const [lineCompletedToast, setLineCompletedToast] = useState<string | null>(null);
   const [isRestartingMatch, setIsRestartingMatch] = useState(false);
   const [socketStatus, setSocketStatus] = useState<SocketConnectionStatus>('CONNECTED');
+
+  // Real-time letter achievement popup for all players
+  interface LetterAchievement {
+    id: string;
+    playerName: string;
+    isYou: boolean;
+    letter: string;
+    progress: number;
+    total: number;
+  }
+  const [letterAchievement, setLetterAchievement] = useState<LetterAchievement | null>(null);
+  const prevPlayersLettersRef = useRef<Record<string, number>>({});
 
   // Monitor real-time socket connection health
   useEffect(() => {
@@ -90,7 +100,6 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
 
   // Track previous turn to trigger audio chimes on turn transition
   const prevIsMyTurnRef = useRef<boolean>(isMyTurn);
-  const prevLineCountRef = useRef<number>(myPlayer.completedLineCount || 0);
   const prevGameStatusRef = useRef<string>(game?.status || 'active');
 
   // Determine next player in rotation
@@ -112,21 +121,52 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     prevIsMyTurnRef.current = isMyTurn;
   }, [isMyTurn, isGameOver]);
 
-  // Play line completed chime and show celebratory toast when local player completes a line
+  // Monitor letter completions across ALL room players in real-time
   useEffect(() => {
-    const currentLineCount = myPlayer.completedLineCount || myCompletedLines.length || 0;
-    if (currentLineCount > prevLineCountRef.current) {
-      const newlyEarned = currentLineCount - prevLineCountRef.current;
-      soundManager.playLineCompleted();
-      const lastLetter = myEarnedLetters[myEarnedLetters.length - 1] || '';
-      setLineCompletedToast(
-        `🎉 ${newlyEarned} Line${newlyEarned > 1 ? 's' : ''} Completed! Unlocked: "${lastLetter}"`
-      );
-      const timer = setTimeout(() => setLineCompletedToast(null), 4000);
-      return () => clearTimeout(timer);
+    const word = room.config.winningWord || 'BINGO';
+
+    // Baseline map initialization on mount / first load
+    if (Object.keys(prevPlayersLettersRef.current).length === 0 && room.players.length > 0) {
+      const initialMap: Record<string, number> = {};
+      room.players.forEach((p) => {
+        initialMap[p.id] = p.earnedLetters?.length || p.completedLineCount || 0;
+      });
+      prevPlayersLettersRef.current = initialMap;
+      return;
     }
-    prevLineCountRef.current = currentLineCount;
-  }, [myPlayer.completedLineCount, myCompletedLines.length, myEarnedLetters]);
+
+    // Check each player's updated letter progress
+    for (const p of room.players) {
+      const currentCount = p.earnedLetters?.length || p.completedLineCount || 0;
+      const prevCount = prevPlayersLettersRef.current[p.id] ?? currentCount;
+
+      if (currentCount > prevCount) {
+        const newlyEarnedLetter =
+          p.earnedLetters?.[currentCount - 1] || word[currentCount - 1] || '';
+        const isYou = p.id === currentPlayer.id;
+
+        soundManager.playLineCompleted();
+
+        setLetterAchievement({
+          id: `${p.id}-${currentCount}-${Date.now()}`,
+          playerName: p.name,
+          isYou,
+          letter: newlyEarnedLetter,
+          progress: currentCount,
+          total: word.length,
+        });
+
+        const timer = setTimeout(() => {
+          setLetterAchievement(null);
+        }, 5000);
+
+        prevPlayersLettersRef.current[p.id] = currentCount;
+        return () => clearTimeout(timer);
+      } else {
+        prevPlayersLettersRef.current[p.id] = currentCount;
+      }
+    }
+  }, [room.players, room.config.winningWord, currentPlayer.id]);
 
   // Play winner fanfare when match ends in a win
   useEffect(() => {
@@ -532,25 +572,55 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
         )}
       </AnimatePresence>
 
-      {/* LINE COMPLETED CELEBRATORY TOAST */}
+      {/* UNIVERSAL REAL-TIME LETTER UNLOCKED POP-UP (SHOWN TO ALL PLAYERS) */}
       <AnimatePresence>
-        {lineCompletedToast && (
+        {letterAchievement && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -8 }}
-            className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-fuchsia-500/20 border-2 border-amber-400/80 text-xs font-black text-amber-200 flex items-center justify-between gap-3 shadow-[0_0_25px_rgba(251,191,36,0.5)]"
+            key={letterAchievement.id}
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+            className="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4 pointer-events-auto"
           >
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-300 animate-spin" />
-              <span>{lineCompletedToast}</span>
+            <div className="relative rounded-2xl bg-gradient-to-r from-arcade-card via-slate-900 to-arcade-surface border-2 border-amber-400 p-4 shadow-[0_0_35px_rgba(251,191,36,0.65),0_10px_25px_rgba(0,0,0,0.85)] backdrop-blur-md flex items-center justify-between gap-3.5">
+              <div className="flex items-center gap-3 min-w-0">
+                {/* Glowing Unlocked Letter Tile */}
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 border-2 border-yellow-200 text-slate-950 font-mono font-black text-2xl flex items-center justify-center shadow-[0_0_20px_rgba(251,191,36,0.85)] shrink-0 animate-bounce">
+                  {letterAchievement.letter}
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-amber-300">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-spin" />
+                    <span>TARGET LETTER COMPLETED!</span>
+                  </div>
+                  <div className="text-sm font-extrabold text-white truncate mt-0.5">
+                    {letterAchievement.isYou ? (
+                      <span className="text-transparent bg-clip-text bg-gradient-to-r from-arcade-magenta via-fuchsia-300 to-amber-300">
+                        You completed a line and unlocked letter &ldquo;{letterAchievement.letter}&rdquo;!
+                      </span>
+                    ) : (
+                      <span>
+                        <strong className="text-arcade-gold">{letterAchievement.playerName}</strong> has unlocked letter &ldquo;{letterAchievement.letter}&rdquo;!
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-300 mt-0.5">
+                    Winning progress: <span className="text-arcade-gold font-bold">{letterAchievement.progress} / {letterAchievement.total}</span> letters
+                  </div>
+                </div>
+              </div>
+
+              {/* Dismiss button */}
+              <button
+                onClick={() => setLetterAchievement(null)}
+                className="p-1.5 rounded-lg bg-arcade-bg/80 hover:bg-arcade-surface text-slate-400 hover:text-white transition shrink-0"
+                aria-label="Dismiss notification"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <button
-              onClick={() => setLineCompletedToast(null)}
-              className="p-1 rounded-lg hover:bg-amber-500/20 text-amber-300 hover:text-white transition"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -721,79 +791,6 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
                 : 'Match finished. All numbers called.'
             }
           />
-        </div>
-      </div>
-
-      {/* 4. CONTENDER ROSTER & TURN ROTATION (Compact Bottom Panel) */}
-      <div className="rounded-2xl bg-arcade-card/70 border border-arcade-border/70 p-3 sm:p-4 shadow-sm">
-        <div className="flex items-center justify-between pb-2 border-b border-arcade-border/60 text-xs">
-          <span className="font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5 text-arcade-gold" />
-            <span>CONTENDER ROSTER & ROTATION</span>
-          </span>
-          <span className="text-arcade-muted text-[11px]">Letter Progress Target: {winningWord}</span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-2">
-          {playerOrder.map((pid, idx) => {
-            const player = room.players.find((p) => p.id === pid);
-            if (!player) return null;
-
-            const isCurrent = pid === currentTurnPlayerId && !isGameOver;
-            const isYou = pid === currentPlayer.id;
-            const pLetters = player.earnedLetters?.length || 0;
-
-            return (
-              <div
-                key={pid}
-                className={`flex items-center justify-between p-2 rounded-xl border text-xs transition-all ${
-                  isCurrent
-                    ? 'bg-gradient-to-r from-arcade-purple/30 via-arcade-card to-arcade-surface border-arcade-magenta shadow-neon-magenta'
-                    : 'bg-arcade-surface/50 border-arcade-border/50'
-                }`}
-              >
-                <div className="flex items-center gap-2 min-w-0 pr-1">
-                  <span
-                    className={`w-5 h-5 rounded-md flex items-center justify-center font-mono font-bold text-[10px] shrink-0 ${
-                      isCurrent
-                        ? 'bg-arcade-magenta text-white shadow-neon-magenta'
-                        : 'bg-arcade-bg text-arcade-muted border border-arcade-border'
-                    }`}
-                  >
-                    {idx + 1}
-                  </span>
-
-                  <span className="font-bold text-white truncate max-w-[90px]">
-                    {player.name}
-                  </span>
-
-                  {player.isHost && (
-                    <span className="text-[10px]" title="Host">
-                      👑
-                    </span>
-                  )}
-
-                  {isYou && (
-                    <span className="px-1 py-0.2 rounded bg-arcade-purple/30 text-fuchsia-300 text-[8px] font-black">
-                      YOU
-                    </span>
-                  )}
-                </div>
-
-                <div className="shrink-0 flex items-center gap-1.5">
-                  <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-arcade-bg/80 border border-arcade-border/60 text-arcade-gold font-bold">
-                    {pLetters}/{winningWord.length}
-                  </span>
-
-                  {isCurrent && (
-                    <span className="text-arcade-magenta flex items-center animate-pulse">
-                      <ArrowRight className="w-3 h-3" />
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
         </div>
       </div>
     </div>
