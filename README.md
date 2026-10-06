@@ -33,12 +33,13 @@
            └────────────────┘
 ```
 
-| Component | Platform | Configuration |
-|---|---|---|
-| **Frontend** | **Vercel** | React 19 + TypeScript + Vite (`client/`), SPA rewrites via `vercel.json` |
-| **Backend** | **Render** | Node.js + Express + Socket.IO (`server/`), Blueprint via `render.yaml` |
-| **Database** | **MongoDB Atlas** | Cloud cluster with persistent game state & round history |
-| **Real-time** | **Socket.IO** | Bi-directional WebSocket & polling transports with CORS validation |
+| Component | Platform | Live Production URL | Configuration |
+|---|---|---|---|
+| **Frontend** | **Vercel** | [https://bingo-arena-one.vercel.app](https://bingo-arena-one.vercel.app) | React 19 + Vite (`client/`), SPA rewrites via `client/vercel.json` |
+| **Backend** | **Render** | [https://bingo-arena-92ne.onrender.com](https://bingo-arena-92ne.onrender.com) | Node.js + Express + Socket.IO (`server/`) |
+| **Health Check** | **Render** | [https://bingo-arena-92ne.onrender.com/api/health](https://bingo-arena-92ne.onrender.com/api/health) | Authoritative database and server status check |
+| **Database** | **MongoDB Atlas** | *(Cloud Cluster)* | Cloud cluster with persistent game state & round history |
+| **Real-time** | **Socket.IO** | `https://bingo-arena-92ne.onrender.com` | WebSocket & polling transports with CORS validation |
 
 ---
 
