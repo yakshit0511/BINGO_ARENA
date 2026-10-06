@@ -73,18 +73,15 @@ async function runPrompt6Tests() {
     // 2. Create a 5x5 room
     const createRes = await request('POST', '/rooms', {
       hostName: 'TestHostYakshit',
-      config: {
-        gridSize: 5,
-        playerLimit: 6,
-        winningWord: 'BINGO',
-        callingMode: 'turn-based',
-        hostParticipates: true,
-      },
+      gridSize: 5,
+      playerLimit: 10,
+      winningWord: 'BINGO',
+      callingMode: 'turn-based',
+      hostParticipates: true,
     });
     assert(createRes.status === 201, '5x5 Room created successfully');
-    const room = createRes.body.data;
-    const roomCode = room.roomCode;
-    const hostPlayerId = room.players[0].id;
+    const roomCode = createRes.body.data.roomCode;
+    const hostPlayerId = createRes.body.data.playerId;
 
     // 3. Reject incomplete board (24 numbers for 5x5)
     const incompleteBoard = Array.from({ length: 24 }, (_, i) => i + 1);
@@ -114,7 +111,8 @@ async function runPrompt6Tests() {
     });
     assert(validSubmitRes.status === 200, 'Submits valid 5x5 board (1..25)');
     assert(validSubmitRes.body.data.board.length === 25, 'Saved board length is exactly 25');
-    assert(validSubmitRes.body.data.player.hasSubmitted === true, 'Player hasSubmitted flag is true');
+    const submittedPlayer = validSubmitRes.body.data.room.players.find((p) => p.playerId === hostPlayerId);
+    assert(submittedPlayer && submittedPlayer.hasSubmitted === true, 'Player hasSubmitted flag is true');
     assert(validSubmitRes.body.data.room.allSubmitted === true, 'Single player room is marked allSubmitted=true');
 
     // 7. Reject double submission / modify after locked
@@ -135,23 +133,22 @@ async function runPrompt6Tests() {
     console.log('\n  --- Multi-Player 6x6 Matrix Test ---');
     const create6x6 = await request('POST', '/rooms', {
       hostName: 'Host6x6',
-      config: {
-        gridSize: 6,
-        playerLimit: 4,
-        winningWord: 'YAKSHI',
-        callingMode: 'turn-based',
-        hostParticipates: true,
-      },
+      gridSize: 6,
+      playerLimit: 10,
+      winningWord: 'YAKSHI',
+      callingMode: 'turn-based',
+      hostParticipates: true,
     });
     const room6Code = create6x6.body.data.roomCode;
-    const player1Id = create6x6.body.data.players[0].id;
+    const player1Id = create6x6.body.data.playerId;
 
     // Join Player 2
-    const joinRes = await request('POST', `/rooms/${room6Code}/join`, {
+    const joinRes = await request('POST', '/rooms/join', {
+      roomCode: room6Code,
       playerName: 'Prashant',
     });
     assert(joinRes.status === 200, 'Player 2 joins 6x6 room');
-    const player2Id = joinRes.body.data.player.id;
+    const player2Id = joinRes.body.data.playerId;
 
     // Initially neither has submitted, allSubmitted should be false
     const initial6Room = await request('GET', `/rooms/${room6Code}`);
@@ -174,27 +171,61 @@ async function runPrompt6Tests() {
     assert(p2Submit.body.data.room.allSubmitted === true, 'After 2/2 players submit, allSubmitted is true!');
 
     // 10. Large Grid Dynamic Validation Tests (7x7, 10x10, 20x20)
-    console.log('\n  --- Large Grid Dynamic Validation (7x7, 10x10, 20x20) ---');
+    console.log('\n  --- Dynamic Grid Size Testing (7x7, 10x10, 20x20) ---');
+
+    // 7x7 Test (49 cells)
+    const create7x7 = await request('POST', '/rooms', {
+      hostName: 'Host7x7',
+      gridSize: 7,
+      playerLimit: 10,
+      winningWord: 'SEVENER',
+      callingMode: 'turn-based',
+      hostParticipates: true,
+    });
+    const room7Code = create7x7.body.data.roomCode;
+    const player7Id = create7x7.body.data.playerId;
+    const valid7x7 = generateShuffledBoard(7);
+    assert(valid7x7.length === 49, 'Generated 7x7 board with 49 sequential cells');
+    const p7Submit = await request('POST', `/rooms/${room7Code}/players/${player7Id}/board`, {
+      cells: valid7x7,
+    });
+    assert(p7Submit.status === 200, '7x7 board (49 cells) validated and submitted successfully');
+
+    // 10x10 Test (100 cells)
     const create10x10 = await request('POST', '/rooms', {
       hostName: 'GridMaster',
-      config: {
-        gridSize: 10,
-        playerLimit: 8,
-        winningWord: 'BINGOARENA',
-        callingMode: 'automatic',
-        hostParticipates: true,
-      },
+      gridSize: 10,
+      playerLimit: 10,
+      winningWord: 'BINGOARENA',
+      callingMode: 'turn-based',
+      hostParticipates: true,
     });
     const room10Code = create10x10.body.data.roomCode;
-    const player10Id = create10x10.body.data.players[0].id;
-
-    // 10x10 needs 100 cells
+    const player10Id = create10x10.body.data.playerId;
     const valid10x10 = generateShuffledBoard(10);
     assert(valid10x10.length === 100, 'Generated 10x10 board with 100 sequential cells');
     const p10Submit = await request('POST', `/rooms/${room10Code}/players/${player10Id}/board`, {
       cells: valid10x10,
     });
     assert(p10Submit.status === 200, '10x10 board (100 cells) validated and submitted successfully');
+
+    // 20x20 Test (400 cells)
+    const create20x20 = await request('POST', '/rooms', {
+      hostName: 'TitanHost',
+      gridSize: 20,
+      playerLimit: 10,
+      winningWord: 'ABCDEFGHIJKLMNOPQRST',
+      callingMode: 'turn-based',
+      hostParticipates: true,
+    });
+    const room20Code = create20x20.body.data.roomCode;
+    const player20Id = create20x20.body.data.playerId;
+    const valid20x20 = generateShuffledBoard(20);
+    assert(valid20x20.length === 400, 'Generated 20x20 board with 400 sequential cells');
+    const p20Submit = await request('POST', `/rooms/${room20Code}/players/${player20Id}/board`, {
+      cells: valid20x20,
+    });
+    assert(p20Submit.status === 200, '20x20 board (400 cells) validated and submitted successfully');
 
     console.log('\n====================================================');
     console.log(`TOTAL TESTS: ${passed + failed} | PASSED: ${passed} | FAILED: ${failed}`);

@@ -9,6 +9,7 @@ export interface ApiResponse<T = unknown> {
 
 export type CallingMode = 'random' | 'turn-based';
 export type RoomStatus = 'waiting' | 'ready' | 'playing' | 'finished';
+export type GameStatus = 'waiting' | 'ready' | 'active' | 'won' | 'ended';
 
 export interface GameConfig {
   gridSize: number;
@@ -16,6 +17,36 @@ export interface GameConfig {
   winningWord: string;
   callingMode: CallingMode;
   hostParticipates: boolean;
+}
+
+export interface IGameState {
+  status: GameStatus;
+  startedAt: Date | null;
+  playerOrder: string[];
+  currentTurnIndex: number;
+  currentPlayerId: string | null;
+  turnNumber: number;
+  calledNumbers: number[];
+  lastCalledNumbers: number[];
+  winnerId: string | null;
+  winningWord: string;
+  completedLetters: number;
+  gamePlayers: string[];
+}
+
+export interface PublicGameState {
+  status: GameStatus;
+  startedAt: string | null;
+  playerOrder: string[];
+  currentTurnIndex: number;
+  currentPlayerId: string | null;
+  turnNumber: number;
+  calledNumbers: number[];
+  lastCalledNumbers: number[];
+  winnerId: string | null;
+  winningWord: string;
+  completedLetters: number;
+  gamePlayers: string[];
 }
 
 export interface IPlayerDocument extends Document {
@@ -41,6 +72,8 @@ export interface IRoomDocument extends Document {
   hostParticipates: boolean;
   players: string[]; // List of playerIds
   status: RoomStatus;
+  turnOrder: string[];
+  game: IGameState;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,6 +99,8 @@ export interface PublicRoom {
   hostParticipates: boolean;
   status: RoomStatus;
   allSubmitted: boolean;
+  turnOrder: string[];
+  game: PublicGameState;
   host: {
     playerId: string;
     name: string;
