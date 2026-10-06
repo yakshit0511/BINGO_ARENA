@@ -16,15 +16,8 @@ export const getIO = (): Server | null => ioInstance;
 export const initSocketServer = (httpServer: HttpServer): Server => {
   const io = new Server(httpServer, {
     cors: {
-      origin: (origin, callback) => {
-        if (!origin || isOriginAllowed(origin)) {
-          callback(null, origin || true);
-        } else {
-          callback(new Error('Not allowed by CORS'));
-        }
-      },
+      origin: '*',
       methods: ['GET', 'POST'],
-      credentials: false,
     },
   });
 

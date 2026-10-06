@@ -291,7 +291,7 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
           setRoom(res.data);
         }
       }).catch(() => {});
-    }, 2500);
+    }, 1500);
 
     return () => clearInterval(interval);
   }, [room.roomCode]);

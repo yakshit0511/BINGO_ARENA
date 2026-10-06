@@ -94,7 +94,33 @@ export function BoardSetupView({
       }
     };
 
+    const handleGameStarted = (data: any) => {
+      if (data?.room) {
+        const mapped = mapBackendRoomToClient(data.room);
+        setRoom(mapped);
+        onRoomUpdate?.(mapped);
+      } else if (data?.status === 'active' || data?.currentPlayerId) {
+        setRoom((prev) => {
+          const updated: Room = {
+            ...prev,
+            status: 'playing',
+            game: data,
+          };
+          onRoomUpdate?.(updated);
+          return updated;
+        });
+      } else {
+        roomService.getRoom(room.roomCode).then((res) => {
+          if (res.success && res.data) {
+            setRoom(res.data);
+            onRoomUpdate?.(res.data);
+          }
+        }).catch(() => {});
+      }
+    };
+
     socket.on('room:state', handleRoomState);
+    socket.on('game:started', handleGameStarted);
 
     // Initial board fetch if already submitted
     if (currentPlayer.hasSubmitted) {
@@ -108,8 +134,9 @@ export function BoardSetupView({
 
     return () => {
       socket.off('room:state', handleRoomState);
+      socket.off('game:started', handleGameStarted);
     };
-  }, [room.roomCode, currentPlayer.id, currentPlayer.hasSubmitted, totalNumbers]);
+  }, [room.roomCode, currentPlayer.id, currentPlayer.hasSubmitted, totalNumbers, onRoomUpdate]);
 
   // Guaranteed polling fallback during board setup to keep all player statuses synchronized
   useEffect(() => {
@@ -120,7 +147,7 @@ export function BoardSetupView({
           onRoomUpdate?.(res.data);
         }
       }).catch(() => {});
-    }, 2500);
+    }, 1500);
 
     return () => clearInterval(interval);
   }, [room.roomCode, onRoomUpdate]);

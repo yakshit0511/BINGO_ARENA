@@ -81,15 +81,17 @@ export function GameRoomPage() {
       }
     };
 
-    const handleGameStarted = (data: { room?: BackendPublicRoom; game?: any }) => {
+    const handleGameStarted = (data: any) => {
       if (data?.room) {
         setCurrentRoom(mapBackendRoomToClient(data.room));
+      } else if (data?.status === 'active' || data?.currentPlayerId) {
+        setCurrentRoom((prev) => (prev ? { ...prev, status: 'playing', game: data } : null));
       } else {
         roomService.getRoom(currentRoom.roomCode).then((res) => {
           if (res.success && res.data) {
             setCurrentRoom(res.data);
           }
-        });
+        }).catch(() => {});
       }
     };
 
@@ -117,7 +119,7 @@ export function GameRoomPage() {
           setCurrentRoom(res.data);
         }
       }).catch(() => {});
-    }, 2500);
+    }, 1500);
 
     return () => clearInterval(interval);
   }, [currentRoom?.roomCode]);
@@ -194,6 +196,7 @@ export function GameRoomPage() {
       <RoomLobbyView
         room={currentRoom}
         currentPlayer={currentPlayer}
+        onRoomUpdate={setCurrentRoom}
         onLeave={() => {
           clearPlayerSession();
           navigate('/');

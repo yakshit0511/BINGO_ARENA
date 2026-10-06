@@ -336,7 +336,8 @@ export async function startGameHandler(req: Request, res: Response): Promise<voi
     if (result.success && result.data) {
       const io: Server | undefined = req.app.get('io');
       if (io) {
-        io.to(`room:${roomCode}`).emit('game:started', result.data.game);
+        const startPayload = { room: result.data.room, game: result.data.game };
+        io.to(`room:${roomCode}`).emit('game:started', startPayload);
         io.to(`room:${roomCode}`).emit('game:state', result.data.game);
         io.to(`room:${roomCode}`).emit('room:state', result.data.room);
       }

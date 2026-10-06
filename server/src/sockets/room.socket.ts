@@ -44,12 +44,12 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
           return;
         }
 
-        const roomCode = String(payload.roomCode || '').trim().toUpperCase();
-        const playerId = String(payload.playerId || '').trim();
+        const roomCode = String(payload?.roomCode || '').trim().toUpperCase();
+        const playerId = payload?.playerId ? String(payload.playerId).trim() : '';
 
-        if (!roomCode || roomCode.length !== 6 || !playerId) {
+        if (!roomCode || roomCode.length !== 6) {
           if (typeof callback === 'function') {
-            callback({ success: false, message: 'Valid room code and player ID are required.' });
+            callback({ success: false, message: 'Valid 6-character room code is required.' });
           }
           return;
         }
@@ -70,46 +70,34 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
           return;
         }
 
-        if (room.status === 'finished') {
-          if (typeof callback === 'function') {
-            callback({ success: false, message: 'This room has already ended or closed.' });
-          }
-          return;
-        }
-
-        // 2. Authoritative DB validation of Player
-        const player = await PlayerModel.findOne({ roomCode, playerId });
-        if (!player || !room.players.includes(playerId)) {
-          if (typeof callback === 'function') {
-            callback({ success: false, message: 'Invalid player session for this room.' });
-          }
-          return;
-        }
-
-        // 3. Bind player metadata to socket
-        socket.data.roomCode = roomCode;
-        socket.data.playerId = playerId;
-        socket.data.isHost = player.isHost;
-
-        // 4. Join Socket.IO room
+        // 2. ALWAYS join Socket.IO room channel so client receives broadcasts
         const socketRoomName = getSocketRoomName(roomCode);
         await socket.join(socketRoomName);
+        socket.data.roomCode = roomCode;
 
-        // 5. Update DB status: connected
-        const updateRes = await roomService.setPlayerConnectionStatus(roomCode, playerId, true);
-        if (!updateRes.success || !updateRes.data) {
-          if (typeof callback === 'function') {
-            callback({ success: false, message: 'Failed to update connection state.' });
+        // 3. If playerId is provided, validate and associate player
+        let publicRoom: any = null;
+        if (playerId) {
+          const player = await PlayerModel.findOne({ roomCode, playerId });
+          if (player) {
+            socket.data.playerId = playerId;
+            socket.data.isHost = player.isHost;
+
+            const updateRes = await roomService.setPlayerConnectionStatus(roomCode, playerId, true);
+            if (updateRes.success && updateRes.data) {
+              publicRoom = updateRes.data;
+              io.to(socketRoomName).emit('room:state', publicRoom);
+            }
+            console.log(`[Socket.IO] Player "${player.name}" (${playerId}) joined socket room ${socketRoomName}`);
           }
-          return;
         }
 
-        const publicRoom = updateRes.data;
-
-        // 6. Broadcast updated room state to all room members
-        io.to(socketRoomName).emit('room:state', publicRoom);
-
-        console.log(`[Socket.IO] Player "${player.name}" (${playerId}) joined socket room ${socketRoomName}`);
+        if (!publicRoom) {
+          const roomRes = await roomService.getRoom(roomCode);
+          if (roomRes.success && roomRes.data) {
+            publicRoom = roomRes.data;
+          }
+        }
 
         if (typeof callback === 'function') {
           callback({
@@ -331,7 +319,8 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
         }
 
         const socketRoomName = getSocketRoomName(roomCode);
-        io.to(socketRoomName).emit('game:started', result.data.game);
+        const startPayload = { room: result.data.room, game: result.data.game };
+        io.to(socketRoomName).emit('game:started', startPayload);
         io.to(socketRoomName).emit('game:state', result.data.game);
         io.to(socketRoomName).emit('room:state', result.data.room);
 

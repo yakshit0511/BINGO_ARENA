@@ -76,6 +76,12 @@ function emitWithTimeout<T>(
   });
 }
 
+let activeRoomSession: { roomCode: string; playerId: string } | null = null;
+
+export function setActiveRoomSession(roomCode: string, playerId: string) {
+  activeRoomSession = { roomCode: roomCode.trim().toUpperCase(), playerId: playerId.trim() };
+}
+
 /**
  * Get or initialize the managed singleton Socket.IO connection.
  */
@@ -86,17 +92,20 @@ export function getSocket(): Socket {
     socketInstance = io(SERVER_URL, {
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 25,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 30,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 3000,
       timeout: 15000,
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       withCredentials: false,
     });
 
     socketInstance.on('connect', () => {
       console.log(`[Socket.IO Client] Connected to server (id: ${socketInstance?.id}) at ${SERVER_URL}`);
       updateStatus('CONNECTED');
+      if (activeRoomSession && socketInstance) {
+        socketInstance.emit('room:join', activeRoomSession, () => {});
+      }
     });
 
     socketInstance.on('disconnect', (reason) => {
@@ -117,6 +126,9 @@ export function getSocket(): Socket {
     socketInstance.io.on('reconnect', () => {
       console.log('[Socket.IO Client] Successfully reconnected');
       updateStatus('CONNECTED');
+      if (activeRoomSession && socketInstance) {
+        socketInstance.emit('room:join', activeRoomSession, () => {});
+      }
     });
   }
 
@@ -154,10 +166,14 @@ export function joinRoomSocket(
   roomCode: string,
   playerId: string
 ): Promise<{ success: boolean; message?: string; room?: any }> {
+  const cleanCode = roomCode.trim().toUpperCase();
+  const cleanPlayerId = playerId.trim();
+  activeRoomSession = { roomCode: cleanCode, playerId: cleanPlayerId };
+
   const socket = getSocket();
   const payload = {
-    roomCode: roomCode.trim().toUpperCase(),
-    playerId: playerId.trim(),
+    roomCode: cleanCode,
+    playerId: cleanPlayerId,
   };
 
   return emitWithTimeout(socket, 'room:join', payload, 3500, 'Join room socket timed out.');
@@ -170,6 +186,7 @@ export function leaveRoomSocket(
   roomCode: string,
   playerId: string
 ): Promise<{ success: boolean; message?: string }> {
+  activeRoomSession = null;
   const socket = getSocket();
   if (!socket.connected) {
     return Promise.resolve({ success: true });

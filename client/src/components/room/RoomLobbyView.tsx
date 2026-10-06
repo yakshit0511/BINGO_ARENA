@@ -42,12 +42,14 @@ interface RoomLobbyViewProps {
   room: Room;
   currentPlayer: Player;
   onLeave: () => void;
+  onRoomUpdate?: (room: Room) => void;
 }
 
 export function RoomLobbyView({
   room: initialRoom,
   currentPlayer,
   onLeave,
+  onRoomUpdate,
 }: RoomLobbyViewProps) {
   const [room, setRoom] = useState<Room>(initialRoom);
   const [viewMode, setViewMode] = useState<'LOBBY' | 'BOARD_SETUP'>('LOBBY');
@@ -90,7 +92,9 @@ export function RoomLobbyView({
         // Re-join socket room upon reconnect or initial connection
         joinRoomSocket(room.roomCode, currentPlayer.id).then((res) => {
           if (res.success && res.room) {
-            setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
+            const mapped = mapBackendRoomToClient(res.room as BackendPublicRoom);
+            setRoom(mapped);
+            onRoomUpdate?.(mapped);
           }
         });
       }
@@ -99,7 +103,9 @@ export function RoomLobbyView({
     // 2. Authoritative room state listener
     const handleRoomState = (rawRoom: BackendPublicRoom) => {
       if (rawRoom && rawRoom.roomCode === room.roomCode) {
-        setRoom(mapBackendRoomToClient(rawRoom));
+        const clientRoom = mapBackendRoomToClient(rawRoom);
+        setRoom(clientRoom);
+        onRoomUpdate?.(clientRoom);
       }
     };
 
@@ -119,24 +125,39 @@ export function RoomLobbyView({
       }
     };
 
-    // 5. Game started listener
-    const handleGameStarted = (data: { room?: BackendPublicRoom; game?: any }) => {
+    // 5. Game started listener - switches to active game instantly
+    const handleGameStarted = (data: any) => {
       soundManager.playGameStart();
       if (data?.room) {
-        setRoom(mapBackendRoomToClient(data.room));
+        const clientRoom = mapBackendRoomToClient(data.room);
+        setRoom(clientRoom);
+        onRoomUpdate?.(clientRoom);
+      } else if (data?.status === 'active' || data?.currentPlayerId) {
+        setRoom((prev) => {
+          const updated: Room = {
+            ...prev,
+            status: 'playing',
+            game: data,
+          };
+          onRoomUpdate?.(updated);
+          return updated;
+        });
       } else {
         roomService.getRoom(room.roomCode).then((res) => {
           if (res.success && res.data) {
             setRoom(res.data);
+            onRoomUpdate?.(res.data);
           }
-        });
+        }).catch(() => {});
       }
     };
 
     // 6. Game authoritative state listener
     const handleGameState = (rawRoom: BackendPublicRoom) => {
       if (rawRoom && rawRoom.roomCode === room.roomCode) {
-        setRoom(mapBackendRoomToClient(rawRoom));
+        const clientRoom = mapBackendRoomToClient(rawRoom);
+        setRoom(clientRoom);
+        onRoomUpdate?.(clientRoom);
       }
     };
 
@@ -182,18 +203,19 @@ export function RoomLobbyView({
     };
   }, [room.roomCode, currentPlayer.id]);
 
-  // Guaranteed polling fallback: refreshes room state every 2.5s so board submissions and new joins sync automatically
+  // Guaranteed polling fallback: refreshes room state every 1.5s so board submissions and new joins sync automatically
   useEffect(() => {
     const interval = setInterval(() => {
       roomService.getRoom(room.roomCode).then((res) => {
         if (res.success && res.data) {
           setRoom(res.data);
+          onRoomUpdate?.(res.data);
         }
       }).catch(() => {});
-    }, 2500);
+    }, 1500);
 
     return () => clearInterval(interval);
-  }, [room.roomCode]);
+  }, [room.roomCode, onRoomUpdate]);
 
   const handleTurnOrderChange = async (newOrder: string[]) => {
     setConfiguredTurnOrder(newOrder);
@@ -224,6 +246,7 @@ export function RoomLobbyView({
         );
         if (restRes.success && restRes.data) {
           setRoom(restRes.data.room);
+          onRoomUpdate?.(restRes.data.room);
           return;
         } else {
           setStartError(restRes.message || res.message || 'Failed to start game.');
@@ -232,11 +255,14 @@ export function RoomLobbyView({
       }
 
       if (res.success && res.room) {
-        setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
+        const mapped = mapBackendRoomToClient(res.room as BackendPublicRoom);
+        setRoom(mapped);
+        onRoomUpdate?.(mapped);
       } else if (res.success) {
         const fresh = await roomService.getRoom(room.roomCode);
         if (fresh.success && fresh.data) {
           setRoom(fresh.data);
+          onRoomUpdate?.(fresh.data);
         }
       }
     } catch (err: unknown) {
