@@ -19,6 +19,7 @@ export function App() {
           <Route path="/game/:roomCode" element={<GameRoomPage />} />
           <Route path="/game/setup" element={<SetupGamePage />} />
           <Route path="/results" element={<ResultsPage />} />
+          <Route path="/results/:roomCode" element={<ResultsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

@@ -250,6 +250,122 @@ export function requestGameStateSocket(
 }
 
 /**
+ * Emit game restart request via socket with server acknowledgement
+ */
+export function restartGameSocket(
+  roomCode: string,
+  playerId: string
+): Promise<{ success: boolean; message?: string; room?: unknown }> {
+  const socket = getSocket();
+
+  return new Promise((resolve) => {
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    const payload = {
+      roomCode: roomCode.trim().toUpperCase(),
+      playerId: playerId.trim(),
+    };
+
+    socket.emit(
+      'game:restart',
+      payload,
+      (res: { success: boolean; message?: string; room?: unknown }) => {
+        resolve(res || { success: false, message: 'No response from server.' });
+      }
+    );
+  });
+}
+
+/**
+ * Emit game continue to next round via socket with server acknowledgement
+ */
+export function continueGameSocket(
+  roomCode: string,
+  playerId: string
+): Promise<{ success: boolean; message?: string; room?: unknown }> {
+  const socket = getSocket();
+
+  return new Promise((resolve) => {
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    const payload = {
+      roomCode: roomCode.trim().toUpperCase(),
+      playerId: playerId.trim(),
+    };
+
+    socket.emit(
+      'game:continue',
+      payload,
+      (res: { success: boolean; message?: string; room?: unknown }) => {
+        resolve(res || { success: false, message: 'No response from server.' });
+      }
+    );
+  });
+}
+
+/**
+ * Emit game end request via socket with server acknowledgement
+ */
+export function endGameSocket(
+  roomCode: string,
+  playerId: string
+): Promise<{ success: boolean; message?: string; room?: unknown }> {
+  const socket = getSocket();
+
+  return new Promise((resolve) => {
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    const payload = {
+      roomCode: roomCode.trim().toUpperCase(),
+      playerId: playerId.trim(),
+    };
+
+    socket.emit(
+      'game:end',
+      payload,
+      (res: { success: boolean; message?: string; room?: unknown }) => {
+        resolve(res || { success: false, message: 'No response from server.' });
+      }
+    );
+  });
+}
+
+/**
+ * Emit close room request via socket with server acknowledgement
+ */
+export function closeRoomSocket(
+  roomCode: string,
+  playerId: string
+): Promise<{ success: boolean; message?: string; room?: unknown }> {
+  const socket = getSocket();
+
+  return new Promise((resolve) => {
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    const payload = {
+      roomCode: roomCode.trim().toUpperCase(),
+      playerId: playerId.trim(),
+    };
+
+    socket.emit(
+      'room:close',
+      payload,
+      (res: { success: boolean; message?: string; room?: unknown }) => {
+        resolve(res || { success: false, message: 'No response from server.' });
+      }
+    );
+  });
+}
+
+/**
  * Disconnect and release the socket.
  */
 export function disconnectSocket(): void {

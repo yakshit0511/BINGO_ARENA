@@ -1,4 +1,4 @@
-import { ApiResponse, GameConfig, Room, Player, RoomStatus, GameState } from '../types';
+import { ApiResponse, GameConfig, Room, Player, RoomStatus, GameState, GameStatus, RoundRecord } from '../types';
 import { API_BASE_URL } from '../constants';
 
 const STORAGE_KEY = 'bingo_arena_current_room';
@@ -13,6 +13,10 @@ export interface BackendPublicPlayer {
   isConnected: boolean;
   hasSubmitted: boolean;
   joinedAt: string;
+  completedLines?: string[];
+  earnedLetters?: string[];
+  completedLineCount?: number;
+  board?: number[];
 }
 
 export interface BackendPublicCallRecord {
@@ -23,8 +27,11 @@ export interface BackendPublicCallRecord {
 }
 
 export interface BackendPublicGameState {
-  status: 'waiting' | 'ready' | 'active' | 'won' | 'ended';
+  status: GameStatus;
   startedAt: string | null;
+  endedAt?: string | null;
+  roundNumber?: number;
+  roundHistory?: RoundRecord[];
   playerOrder: string[];
   currentTurnIndex: number;
   currentPlayerId: string | null;
@@ -35,8 +42,13 @@ export interface BackendPublicGameState {
   callHistory?: BackendPublicCallRecord[];
   lastCalledNumbers: BackendPublicCallRecord[];
   winnerId: string | null;
+  winnerName?: string | null;
+  winningNumber?: number | null;
+  wonAt?: string | null;
   winningWord: string;
   completedLetters: number;
+  winningLines?: string[];
+  winnerProgress?: number;
   gamePlayers: string[];
 }
 
@@ -50,7 +62,7 @@ export interface BackendPublicRoom {
   winningWord: string;
   callingMode: 'random' | 'turn-based';
   hostParticipates: boolean;
-  status: 'waiting' | 'ready' | 'playing' | 'finished';
+  status: RoomStatus;
   allSubmitted?: boolean;
   turnOrder?: string[];
   game?: BackendPublicGameState;
@@ -86,6 +98,10 @@ export function mapBackendRoomToClient(backendRoom: BackendPublicRoom): Room {
       avatarColor: color,
       isConnected: p.isConnected !== false,
       hasSubmitted: p.hasSubmitted,
+      completedLines: p.completedLines || [],
+      earnedLetters: p.earnedLetters || [],
+      completedLineCount: p.completedLineCount || 0,
+      board: p.board,
     };
   });
 
@@ -110,6 +126,9 @@ export function mapBackendRoomToClient(backendRoom: BackendPublicRoom): Room {
       ? {
           status: backendRoom.game.status,
           startedAt: backendRoom.game.startedAt,
+          endedAt: backendRoom.game.endedAt || null,
+          roundNumber: backendRoom.game.roundNumber || 1,
+          roundHistory: backendRoom.game.roundHistory || [],
           playerOrder: backendRoom.game.playerOrder || [],
           currentTurnIndex: backendRoom.game.currentTurnIndex || 0,
           currentPlayerId: backendRoom.game.currentPlayerId || null,
@@ -120,8 +139,13 @@ export function mapBackendRoomToClient(backendRoom: BackendPublicRoom): Room {
           callHistory: backendRoom.game.callHistory || [],
           lastCalledNumbers: backendRoom.game.lastCalledNumbers || [],
           winnerId: backendRoom.game.winnerId || null,
+          winnerName: backendRoom.game.winnerName || null,
+          winningNumber: backendRoom.game.winningNumber ?? null,
+          wonAt: backendRoom.game.wonAt || null,
           winningWord: backendRoom.game.winningWord || backendRoom.winningWord,
           completedLetters: backendRoom.game.completedLetters || 0,
+          winningLines: backendRoom.game.winningLines || [],
+          winnerProgress: backendRoom.game.winnerProgress || 0,
           gamePlayers: backendRoom.game.gamePlayers || [],
         }
       : undefined,
@@ -573,6 +597,182 @@ export const roomService = {
           room: clientRoom,
           game: json.data.game,
           calledNumber: json.data.calledNumber,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unable to connect to server.',
+      };
+    }
+  },
+
+  /**
+   * Host restarts match without rebuilding the room
+   */
+  async restartGame(
+    roomCode: string,
+    playerId: string
+  ): Promise<ApiResponse<{ room: Room; game: GameState }>> {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/rooms/${roomCode.trim().toUpperCase()}/game/restart`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ playerId }),
+        }
+      );
+
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        return {
+          success: false,
+          message: json.message || 'Failed to restart match.',
+        };
+      }
+
+      const clientRoom = mapBackendRoomToClient(json.data.room);
+      return {
+        success: true,
+        message: json.message || 'Match restarted successfully.',
+        data: {
+          room: clientRoom,
+          game: json.data.game,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unable to connect to server.',
+      };
+    }
+  },
+
+  /**
+   * Host explicitly ends the match
+   */
+  async endGame(
+    roomCode: string,
+    playerId: string
+  ): Promise<ApiResponse<{ room: Room; game: GameState }>> {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/rooms/${roomCode.trim().toUpperCase()}/game/end`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ playerId }),
+        }
+      );
+
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        return {
+          success: false,
+          message: json.message || 'Failed to end match.',
+        };
+      }
+
+      const clientRoom = mapBackendRoomToClient(json.data.room);
+      return {
+        success: true,
+        message: json.message || 'Match ended.',
+        data: {
+          room: clientRoom,
+          game: json.data.game,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unable to connect to server.',
+      };
+    }
+  },
+
+  /**
+   * Host continues the match to a new round after a win
+   */
+  async continueGame(
+    roomCode: string,
+    playerId: string
+  ): Promise<ApiResponse<{ room: Room; game: GameState }>> {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/rooms/${roomCode.trim().toUpperCase()}/game/continue`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ playerId }),
+        }
+      );
+
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        return {
+          success: false,
+          message: json.message || 'Failed to continue to next round.',
+        };
+      }
+
+      const clientRoom = mapBackendRoomToClient(json.data.room);
+      return {
+        success: true,
+        message: json.message || 'Next round started.',
+        data: {
+          room: clientRoom,
+          game: json.data.game,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unable to connect to server.',
+      };
+    }
+  },
+
+  /**
+   * Host closes the entire room session
+   */
+  async closeRoom(
+    roomCode: string,
+    playerId: string
+  ): Promise<ApiResponse<{ room: Room; game?: GameState }>> {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/rooms/${roomCode.trim().toUpperCase()}/close`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ playerId }),
+        }
+      );
+
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        return {
+          success: false,
+          message: json.message || 'Failed to close room.',
+        };
+      }
+
+      const clientRoom = mapBackendRoomToClient(json.data.room);
+      return {
+        success: true,
+        message: json.message || 'Room closed.',
+        data: {
+          room: clientRoom,
+          game: json.data.game,
         },
       };
     } catch (error) {

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Lock } from 'lucide-react';
+import { Lock, Sparkles } from 'lucide-react';
 
 interface BingoBoardProps {
   gridSize: number;
@@ -9,6 +9,7 @@ interface BingoBoardProps {
   nextNumber?: number | null;
   isLocked: boolean;
   calledNumbers?: number[];
+  completedLines?: string[];
   className?: string;
 }
 
@@ -19,10 +20,38 @@ export function BingoBoard({
   nextNumber,
   isLocked,
   calledNumbers,
+  completedLines,
   className = '',
 }: BingoBoardProps) {
   // Efficient Set-based lookup for called numbers
   const calledSet = useMemo(() => new Set(calledNumbers || []), [calledNumbers]);
+
+  // Compute set of cell indices that belong to completed lines
+  const completedLineIndices = useMemo(() => {
+    if (!completedLines || completedLines.length === 0) return new Set<number>();
+    const indices = new Set<number>();
+    const N = gridSize;
+
+    for (const lineId of completedLines) {
+      if (lineId.startsWith('row-')) {
+        const r = parseInt(lineId.replace('row-', ''), 10);
+        if (!isNaN(r) && r >= 0 && r < N) {
+          for (let c = 0; c < N; c++) indices.add(r * N + c);
+        }
+      } else if (lineId.startsWith('column-')) {
+        const c = parseInt(lineId.replace('column-', ''), 10);
+        if (!isNaN(c) && c >= 0 && c < N) {
+          for (let r = 0; r < N; r++) indices.add(r * N + c);
+        }
+      } else if (lineId === 'main-diagonal') {
+        for (let i = 0; i < N; i++) indices.add(i * N + i);
+      } else if (lineId === 'anti-diagonal') {
+        for (let i = 0; i < N; i++) indices.add(i * N + (N - 1 - i));
+      }
+    }
+
+    return indices;
+  }, [completedLines, gridSize]);
 
   // Determine dynamic cell dimension classes based on grid size
   const getCellDimensions = () => {
@@ -50,7 +79,7 @@ export function BingoBoard({
   return (
     <div className={`relative flex flex-col items-center select-none ${className}`}>
       {/* Board Matrix Container with subtle arcade border & perspective */}
-      <div className="max-w-full overflow-x-auto overflow-y-hidden p-3 sm:p-5 rounded-2xl bg-arcade-card/90 border-2 border-arcade-border shadow-arcade-card backdrop-blur-md">
+      <div className="max-w-full overflow-x-auto overflow-y-hidden p-2 sm:p-3.5 rounded-2xl bg-arcade-bg/80 border border-arcade-border/60 shadow-inner backdrop-blur-md">
         <div
           className="grid gap-1.5 sm:gap-2 justify-center mx-auto"
           style={{
@@ -60,6 +89,7 @@ export function BingoBoard({
           {cells.map((value, index) => {
             const isFilled = value !== null;
             const isCalled = isFilled && calledSet.has(value);
+            const isLineComplete = isFilled && completedLineIndices.has(index);
             const canClick = !isFilled && !isLocked && nextNumber !== null && typeof onCellClick === 'function';
 
             return (
@@ -76,7 +106,9 @@ export function BingoBoard({
                   group relative flex items-center justify-center font-mono font-black rounded-lg sm:rounded-xl transition-all duration-150 touch-manipulation
                   ${cellDimClass}
                   ${
-                    isCalled
+                    isLineComplete
+                      ? 'bg-gradient-to-br from-amber-300 via-orange-500 to-fuchsia-600 border-2 border-yellow-100 text-slate-950 font-black shadow-[0_0_25px_rgba(251,191,36,0.9),0_0_15px_rgba(217,70,239,0.7)] scale-[1.06] z-20 cursor-default animate-pulse'
+                      : isCalled
                       ? 'bg-gradient-to-br from-amber-400 via-arcade-gold to-yellow-500 border-2 border-yellow-200 text-slate-950 font-black shadow-[0_0_20px_rgba(251,191,36,0.65)] scale-[1.03] z-10 cursor-default'
                       : isFilled
                       ? 'bg-gradient-to-br from-arcade-purple via-fuchsia-900 to-slate-900 border-2 border-fuchsia-400/60 text-white shadow-[0_0_12px_rgba(217,70,239,0.3)] cursor-default'
@@ -94,12 +126,16 @@ export function BingoBoard({
                     className="relative flex items-center justify-center"
                   >
                     <span className="drop-shadow-md select-none">{value}</span>
-                    {isCalled && (
+                    {isLineComplete ? (
+                      <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3">
+                        <Sparkles className="w-3 h-3 text-amber-200 animate-spin" />
+                      </span>
+                    ) : isCalled ? (
                       <span className="absolute -top-1 -right-1 flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-100 opacity-75" />
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-300" />
                       </span>
-                    )}
+                    ) : null}
                   </motion.div>
                 ) : (
                   <>

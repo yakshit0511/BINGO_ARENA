@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Gamepad2, Info, PlusCircle, Users } from 'lucide-react';
+import { Link, useParams, useNavigate, Navigate } from 'react-router-dom';
+import { ArrowLeft, Gamepad2, Info, PlusCircle, Users, DoorClosed } from 'lucide-react';
 import { roomService } from '../lib/roomService';
 import { getPlayerSession, clearPlayerSession } from '../lib/session';
 import { Room, Player } from '../types';
@@ -68,9 +68,39 @@ export function GameRoomPage() {
     );
   }
 
-  // If in an active game
+  // Room closed state
+  if (currentRoom?.status === 'closed') {
+    return (
+      <PageTransition className="max-w-md mx-auto px-4 py-16 text-center space-y-4">
+        <div className="w-14 h-14 mx-auto rounded-2xl bg-red-950/40 border border-red-800 text-red-400 flex items-center justify-center">
+          <DoorClosed className="w-7 h-7" />
+        </div>
+        <h2 className="text-2xl font-black text-white uppercase tracking-wider">ROOM CLOSED</h2>
+        <p className="text-xs text-arcade-muted">The host has closed this multiplayer room session.</p>
+        <Link
+          to="/"
+          onClick={() => clearPlayerSession()}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs uppercase"
+        >
+          Return to Home
+        </Link>
+      </PageTransition>
+    );
+  }
+
+  // Ended match state -> Redirect to Results screen
+  if (currentRoom && (currentRoom.status === 'finished' || currentRoom.game?.status === 'ended')) {
+    return <Navigate to={`/results/${currentRoom.roomCode}`} replace />;
+  }
+
+  // If in an active game, won state, or no_winner state
   if (currentRoom && currentPlayer) {
-    if (currentRoom.status === 'playing' || currentRoom.game?.status === 'active') {
+    if (
+      currentRoom.status === 'playing' ||
+      currentRoom.game?.status === 'active' ||
+      currentRoom.game?.status === 'won' ||
+      currentRoom.game?.status === 'no_winner'
+    ) {
       return (
         <ActiveGameView
           room={currentRoom}

@@ -6,6 +6,7 @@ interface CurrentNumberBallProps {
   callerName: string | null;
   turnNumber: number;
   className?: string;
+  compact?: boolean;
 }
 
 export function CurrentNumberBall({
@@ -13,8 +14,72 @@ export function CurrentNumberBall({
   callerName,
   turnNumber,
   className = '',
+  compact = false,
 }: CurrentNumberBallProps) {
   const hasCalled = currentNumber !== null;
+
+  if (compact) {
+    return (
+      <div
+        className={`relative rounded-2xl bg-gradient-to-r from-arcade-card via-arcade-surface to-arcade-card border border-arcade-purple/50 p-2.5 sm:p-3 shadow-arcade-card flex items-center gap-3 overflow-hidden ${className}`}
+      >
+        {/* Ambient Pulsing Aura */}
+        <div className="absolute -left-4 top-1/2 -translate-y-1/2 w-24 h-24 bg-arcade-magenta/20 rounded-full blur-xl pointer-events-none" />
+
+        {/* 3D Bingo Ball Shell (Compact Size) */}
+        <div className="relative shrink-0 flex items-center justify-center">
+          <div className="absolute w-14 h-14 rounded-full bg-gradient-to-tr from-arcade-purple/40 to-arcade-magenta/40 blur-md animate-pulse" />
+          <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700 p-1 shadow-[0_4px_12px_rgba(0,0,0,0.8),inset_0_2px_6px_rgba(255,255,255,0.6)] flex items-center justify-center">
+            <div className="w-full h-full rounded-full bg-gradient-to-br from-slate-900 via-arcade-bg to-slate-950 border-2 border-white/80 shadow-[inset_0_4px_8px_rgba(0,0,0,0.9)] flex items-center justify-center overflow-hidden">
+              <AnimatePresence mode="wait">
+                {hasCalled ? (
+                  <motion.div
+                    key={`${currentNumber}-${turnNumber}`}
+                    initial={{ scale: 0.3, rotate: -20, opacity: 0 }}
+                    animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                    exit={{ scale: 1.3, opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                    className="flex items-center justify-center select-none"
+                  >
+                    <span className="font-mono text-xl sm:text-2xl font-black text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
+                      {currentNumber}
+                    </span>
+                  </motion.div>
+                ) : (
+                  <motion.div key="waiting" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <span className="font-mono text-lg font-black text-slate-600">—</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            {/* Specular Highlight */}
+            <div className="absolute top-1.5 left-2.5 w-4 h-2 rounded-full bg-white/40 blur-[1px] pointer-events-none -rotate-45" />
+          </div>
+        </div>
+
+        {/* Info Column */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-arcade-gold">
+            <Radio className="w-3 h-3 text-arcade-magenta animate-pulse" />
+            <span>CURRENT NUMBER</span>
+          </div>
+          <div className="text-xs text-slate-200 truncate mt-0.5">
+            {hasCalled ? (
+              <span className="flex items-center gap-1 text-slate-300">
+                <User className="w-3 h-3 text-arcade-gold shrink-0" />
+                <span className="truncate">
+                  Called by <strong className="text-white font-bold">{callerName || 'Contender'}</strong>
+                </span>
+                <Sparkles className="w-3 h-3 text-arcade-gold shrink-0" />
+              </span>
+            ) : (
+              <span className="text-arcade-muted italic text-[11px]">Awaiting first call</span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -63,6 +63,13 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
           return;
         }
 
+        if (room.status === 'closed') {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: 'The room has already been closed.' });
+          }
+          return;
+        }
+
         if (room.status === 'finished') {
           if (typeof callback === 'function') {
             callback({ success: false, message: 'This room has already ended or closed.' });
@@ -435,6 +442,15 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
 
         const socketRoomName = getSocketRoomName(roomCode);
         io.to(socketRoomName).emit('game:number:called', result.data);
+        if (result.data.winner) {
+          io.to(socketRoomName).emit('game:won', result.data.winner);
+        } else if (result.data.game.status === 'no_winner') {
+          io.to(socketRoomName).emit('game:no_winner', {
+            roomCode,
+            totalCalls: result.data.game.calledNumbers.length,
+            message: 'All numbers have been called. No player completed the winning word.',
+          });
+        }
         io.to(socketRoomName).emit('game:state', result.data.game);
         io.to(socketRoomName).emit('room:state', result.data.room);
 
@@ -458,6 +474,201 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
       }
     }
   );
+
+  /**
+   * Event: game:restart
+   * Host restarts a completed, no-winner, or won match into a new round.
+   */
+  socket.on(
+    'game:restart',
+    async (payload: { roomCode: string; playerId: string }, callback?: AckCallback) => {
+      try {
+        const roomCode = String(payload?.roomCode || socket.data?.roomCode || '').trim().toUpperCase();
+        const playerId = String(payload?.playerId || socket.data?.playerId || '').trim();
+
+        if (!roomCode || !playerId) {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: 'Room code and player ID are required.' });
+          }
+          return;
+        }
+
+        const result = await roomService.restartGame(roomCode, playerId);
+        if (!result.success || !result.data) {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: result.message });
+          }
+          return;
+        }
+
+        const socketRoomName = getSocketRoomName(roomCode);
+        io.to(socketRoomName).emit('game:restarted', result.data.game);
+        io.to(socketRoomName).emit('game:started', result.data.game);
+        io.to(socketRoomName).emit('game:state', result.data.game);
+        io.to(socketRoomName).emit('room:state', result.data.room);
+
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            message: 'Match restarted successfully',
+            room: result.data.room,
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.IO] Error in game:restart:', error);
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Internal server error restarting match.' });
+        }
+      }
+    }
+  );
+
+  /**
+   * Event: game:continue
+   * Host continues a won match into the next round.
+   */
+  socket.on(
+    'game:continue',
+    async (payload: { roomCode: string; playerId: string }, callback?: AckCallback) => {
+      try {
+        const roomCode = String(payload?.roomCode || socket.data?.roomCode || '').trim().toUpperCase();
+        const playerId = String(payload?.playerId || socket.data?.playerId || '').trim();
+
+        if (!roomCode || !playerId) {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: 'Room code and player ID are required.' });
+          }
+          return;
+        }
+
+        const result = await roomService.continueGame(roomCode, playerId);
+        if (!result.success || !result.data) {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: result.message });
+          }
+          return;
+        }
+
+        const socketRoomName = getSocketRoomName(roomCode);
+        io.to(socketRoomName).emit('game:continued', result.data.game);
+        io.to(socketRoomName).emit('game:started', result.data.game);
+        io.to(socketRoomName).emit('game:state', result.data.game);
+        io.to(socketRoomName).emit('room:state', result.data.room);
+
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            message: 'New round started successfully',
+            room: result.data.room,
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.IO] Error in game:continue:', error);
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Internal server error continuing match.' });
+        }
+      }
+    }
+  );
+
+  /**
+   * Event: game:end
+   * Host ends the match and sends all clients to Results.
+   */
+  socket.on(
+    'game:end',
+    async (payload: { roomCode: string; playerId: string }, callback?: AckCallback) => {
+      try {
+        const roomCode = String(payload?.roomCode || socket.data?.roomCode || '').trim().toUpperCase();
+        const playerId = String(payload?.playerId || socket.data?.playerId || '').trim();
+
+        if (!roomCode || !playerId) {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: 'Room code and player ID are required.' });
+          }
+          return;
+        }
+
+        const result = await roomService.endGame(roomCode, playerId);
+        if (!result.success || !result.data) {
+          if (typeof callback === 'function') {
+            callback({ success: false, message: result.message });
+          }
+          return;
+        }
+
+        const socketRoomName = getSocketRoomName(roomCode);
+        io.to(socketRoomName).emit('game:ended', result.data.game);
+        io.to(socketRoomName).emit('game:state', result.data.game);
+        io.to(socketRoomName).emit('room:state', result.data.room);
+
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            message: 'Match ended by host',
+            room: result.data.room,
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.IO] Error in game:end:', error);
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Internal server error ending match.' });
+        }
+      }
+    }
+  );
+
+  /**
+   * Event: room:close / room:end
+   * Host closes the entire room session permanently.
+   */
+  const handleRoomClose = async (payload: { roomCode: string; playerId: string }, callback?: AckCallback) => {
+    try {
+      const roomCode = String(payload?.roomCode || socket.data?.roomCode || '').trim().toUpperCase();
+      const playerId = String(payload?.playerId || socket.data?.playerId || '').trim();
+
+      if (!roomCode || !playerId) {
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Room code and player ID are required.' });
+        }
+        return;
+      }
+
+      const result = await roomService.closeRoom(roomCode, playerId);
+      if (!result.success || !result.data) {
+        if (typeof callback === 'function') {
+          callback({ success: false, message: result.message });
+        }
+        return;
+      }
+
+      const socketRoomName = getSocketRoomName(roomCode);
+      io.to(socketRoomName).emit('room:closed', {
+        roomCode,
+        message: 'The host has closed this room.',
+      });
+      if (result.data.game) {
+        io.to(socketRoomName).emit('game:state', result.data.game);
+      }
+      io.to(socketRoomName).emit('room:state', result.data.room);
+
+      if (typeof callback === 'function') {
+        callback({
+          success: true,
+          message: 'Room closed by host',
+          room: result.data.room,
+        });
+      }
+    } catch (error) {
+      console.error('[Socket.IO] Error closing room:', error);
+      if (typeof callback === 'function') {
+        callback({ success: false, message: 'Internal server error closing room.' });
+      }
+    }
+  };
+
+  socket.on('room:close', handleRoomClose);
+  socket.on('room:end', handleRoomClose);
 
   /**
    * Event: game:request-state

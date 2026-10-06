@@ -11,6 +11,10 @@ import {
   advanceTurnHandler,
   callNumberHandler,
   callRandomNumberHandler,
+  restartGameHandler,
+  continueGameHandler,
+  endGameHandler,
+  closeRoomHandler,
 } from '../controllers/room.controller';
 
 const router = Router();
@@ -44,6 +48,18 @@ router.post('/:roomCode/game/call-number', callNumberHandler);
 
 // POST /api/rooms/:roomCode/game/call-random - Call a random unused number (Random mode)
 router.post('/:roomCode/game/call-random', callRandomNumberHandler);
+
+// POST /api/rooms/:roomCode/game/restart - Host restarts match
+router.post('/:roomCode/game/restart', restartGameHandler);
+
+// POST /api/rooms/:roomCode/game/continue - Host continues to next round
+router.post('/:roomCode/game/continue', continueGameHandler);
+
+// POST /api/rooms/:roomCode/game/end - Host ends match
+router.post('/:roomCode/game/end', endGameHandler);
+
+// POST /api/rooms/:roomCode/close - Host closes room session
+router.post('/:roomCode/close', closeRoomHandler);
 
 // POST /api/rooms/:roomCode/game/advance-turn - Advance turn (Foundation helper)
 router.post('/:roomCode/game/advance-turn', advanceTurnHandler);

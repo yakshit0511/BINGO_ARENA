@@ -8,9 +8,11 @@ import {
   IGameState,
   IPlayerDocument,
   IRoomDocument,
+  CallNumberResultData,
 } from '../types';
 import { generateUniqueRoomCode, generatePlayerId } from '../utils/roomCode';
 import { validatePlayerBoard, validateTurnOrderInput } from '../utils/validation';
+import { bingoService, PlayerLineEvaluation } from './bingo.service';
 
 export interface ServiceResult<T> {
   success: boolean;
@@ -27,6 +29,9 @@ export function formatPublicGameState(game?: IGameState): PublicGameState {
     return {
       status: 'waiting',
       startedAt: null,
+      endedAt: null,
+      roundNumber: 1,
+      roundHistory: [],
       playerOrder: [],
       currentTurnIndex: 0,
       currentPlayerId: null,
@@ -37,14 +42,19 @@ export function formatPublicGameState(game?: IGameState): PublicGameState {
       callHistory: [],
       lastCalledNumbers: [],
       winnerId: null,
+      winnerName: null,
+      winningNumber: null,
+      wonAt: null,
       winningWord: '',
       completedLetters: 0,
+      winningLines: [],
+      winnerProgress: 0,
       gamePlayers: [],
     };
   }
 
   const formatRecord = (r: unknown) => {
-    const rec = r as { number?: number; playerId?: string; playerName?: string; calledAt?: Date | string };
+    const rec = r as { number: number; playerId?: string; playerName?: string; calledAt?: Date | string };
     if (!rec || typeof rec.number !== 'number') {
       return {
         number: Number(r) || 0,
@@ -61,9 +71,70 @@ export function formatPublicGameState(game?: IGameState): PublicGameState {
     };
   };
 
+  const formatRound = (rh: unknown) => {
+    const r = rh as {
+      roundNumber?: number;
+      winnerId?: string | null;
+      winnerName?: string | null;
+      winningNumber?: number | null;
+      winningWord?: string;
+      totalCalls?: number;
+      startedAt?: Date | string;
+      endedAt?: Date | string;
+      noWinner?: boolean;
+      playerProgress?: {
+        playerId: string;
+        playerName: string;
+        earnedLetters?: string[];
+        completedLines?: string[];
+        completedLineCount?: number;
+      }[];
+      callHistory?: unknown[];
+    };
+    if (!r) {
+      return {
+        roundNumber: 1,
+        winnerId: null,
+        winnerName: null,
+        winningNumber: null,
+        winningWord: '',
+        totalCalls: 0,
+        startedAt: new Date().toISOString(),
+        endedAt: new Date().toISOString(),
+        noWinner: false,
+        playerProgress: [],
+        callHistory: [],
+      };
+    }
+    return {
+      roundNumber: r.roundNumber || 1,
+      winnerId: r.winnerId || null,
+      winnerName: r.winnerName || null,
+      winningNumber: r.winningNumber ?? null,
+      winningWord: r.winningWord || '',
+      totalCalls: r.totalCalls || 0,
+      startedAt: r.startedAt ? (r.startedAt instanceof Date ? r.startedAt.toISOString() : String(r.startedAt)) : new Date().toISOString(),
+      endedAt: r.endedAt ? (r.endedAt instanceof Date ? r.endedAt.toISOString() : String(r.endedAt)) : new Date().toISOString(),
+      noWinner: Boolean(r.noWinner),
+      playerProgress: Array.isArray(r.playerProgress)
+        ? r.playerProgress.map((pp) => ({
+            playerId: pp.playerId,
+            playerName: pp.playerName,
+            earnedLetters: Array.isArray(pp.earnedLetters) ? pp.earnedLetters : [],
+            completedLines: Array.isArray(pp.completedLines) ? pp.completedLines : [],
+            completedLineCount: pp.completedLineCount || 0,
+          }))
+        : [],
+      callHistory: Array.isArray(r.callHistory) ? r.callHistory.map(formatRecord) : [],
+    };
+  };
+
   return {
     status: game.status || 'waiting',
     startedAt: game.startedAt ? game.startedAt.toISOString() : null,
+    endedAt: game.endedAt ? (game.endedAt instanceof Date ? game.endedAt.toISOString() : String(game.endedAt)) : null,
+    roundNumber: game.roundNumber || 1,
+    roundHistory: Array.isArray(game.roundHistory) ? game.roundHistory.map(formatRound) : [],
     playerOrder: game.playerOrder || [],
     currentTurnIndex: game.currentTurnIndex || 0,
     currentPlayerId: game.currentPlayerId || null,
@@ -74,8 +145,13 @@ export function formatPublicGameState(game?: IGameState): PublicGameState {
     callHistory: Array.isArray(game.callHistory) ? game.callHistory.map(formatRecord) : [],
     lastCalledNumbers: Array.isArray(game.lastCalledNumbers) ? game.lastCalledNumbers.map(formatRecord) : [],
     winnerId: game.winnerId || null,
+    winnerName: game.winnerName || null,
+    winningNumber: game.winningNumber ?? null,
+    wonAt: game.wonAt ? (game.wonAt instanceof Date ? game.wonAt.toISOString() : String(game.wonAt)) : null,
     winningWord: game.winningWord || '',
     completedLetters: game.completedLetters || 0,
+    winningLines: Array.isArray(game.winningLines) ? game.winningLines : [],
+    winnerProgress: game.winnerProgress ?? (game.completedLetters || 0),
     gamePlayers: game.gamePlayers || [],
   };
 }
@@ -95,6 +171,10 @@ export function formatPublicRoom(
     isConnected: p.isConnected,
     hasSubmitted: p.hasSubmitted,
     joinedAt: p.joinedAt ? p.joinedAt.toISOString() : new Date().toISOString(),
+    completedLines: p.completedLines || [],
+    earnedLetters: p.earnedLetters || [],
+    completedLineCount: p.completedLineCount || 0,
+    board: p.board,
   }));
 
   const hostName = hostPlayer ? hostPlayer.name : 'Unknown Host';
@@ -209,6 +289,14 @@ export const roomService = {
     }
 
     // 2. Check room status
+    if (room.status === 'closed') {
+      return {
+        success: false,
+        statusCode: 403,
+        message: 'The room has already been closed.',
+      };
+    }
+
     if (room.status === 'playing' || room.game?.status === 'active') {
       return {
         success: false,
@@ -445,6 +533,10 @@ export const roomService = {
       return { success: false, statusCode: 404, message: `Room "${cleanCode}" not found.` };
     }
 
+    if (room.status === 'closed') {
+      return { success: false, statusCode: 403, message: 'The room has already been closed.' };
+    }
+
     if (room.status === 'finished') {
       return { success: false, statusCode: 409, message: 'This room match is already closed.' };
     }
@@ -554,6 +646,14 @@ export const roomService = {
       return { success: false, statusCode: 404, message: `Room "${cleanCode}" not found.` };
     }
 
+    if (room.status === 'closed') {
+      return {
+        success: false,
+        statusCode: 403,
+        message: 'The room has already been closed.',
+      };
+    }
+
     // 1. Host permission check
     if (room.hostPlayerId !== requesterPlayerId) {
       return {
@@ -640,7 +740,15 @@ export const roomService = {
       };
     }
 
-    // 2. Already started check
+    // 2. Already started or closed check
+    if (room.status === 'closed') {
+      return {
+        success: false,
+        statusCode: 403,
+        message: 'The room has already been closed.',
+      };
+    }
+
     if (room.status === 'playing' || room.game?.status === 'active') {
       return {
         success: false,
@@ -722,6 +830,9 @@ export const roomService = {
     room.game = {
       status: 'active',
       startedAt: new Date(),
+      endedAt: null,
+      roundNumber: room.game?.roundNumber || 1,
+      roundHistory: room.game?.roundHistory || [],
       playerOrder: finalOrder,
       currentTurnIndex: 0,
       currentPlayerId: finalOrder[0],
@@ -732,8 +843,13 @@ export const roomService = {
       callHistory: [],
       lastCalledNumbers: [],
       winnerId: null,
+      winnerName: null,
+      winningNumber: null,
+      wonAt: null,
       winningWord: room.winningWord,
       completedLetters: 0,
+      winningLines: [],
+      winnerProgress: 0,
       gamePlayers: frozenGamePlayers,
     };
 
@@ -831,19 +947,7 @@ export const roomService = {
     roomCode: string,
     requesterPlayerId: string,
     rawNumber: unknown
-  ): Promise<
-    ServiceResult<{
-      room: PublicRoom;
-      game: PublicGameState;
-      calledNumber: number;
-      callRecord: {
-        number: number;
-        playerId: string;
-        playerName: string;
-        calledAt: string;
-      };
-    }>
-  > {
+  ): Promise<ServiceResult<CallNumberResultData>> {
     const cleanCode = roomCode.trim().toUpperCase();
     const cleanPlayerId = requesterPlayerId.trim();
 
@@ -860,16 +964,20 @@ export const roomService = {
     }
 
     // 3. Active game checks
+    if (room.status === 'closed') {
+      return { success: false, statusCode: 403, message: 'The room has already been closed.' };
+    }
+
     if (!room.game) {
       return { success: false, statusCode: 400, message: 'Game has not started.' };
     }
 
-    if (room.game.status === 'won' || room.game.status === 'ended') {
+    if (room.game.status === 'won' || room.game.status === 'ended' || room.game.status === 'no_winner') {
       return { success: false, statusCode: 400, message: 'Game has already ended.' };
     }
 
     if (room.game.status !== 'active') {
-      return { success: false, statusCode: 400, message: 'Game has not started.' };
+      return { success: false, statusCode: 400, message: 'Game is not active.' };
     }
 
     // 4. Participant verification
@@ -926,15 +1034,11 @@ export const roomService = {
       calledAt: now,
     };
 
-    // 9. Turn progression calculation
+    // 9. Turn progression calculation order
     const frozenOrder =
       room.game.playerOrder && room.game.playerOrder.length > 0
         ? room.game.playerOrder
         : room.game.gamePlayers;
-
-    const nextIndex = (room.game.currentTurnIndex + 1) % frozenOrder.length;
-    const nextPlayerId = frozenOrder[nextIndex];
-    const nextTurnNumber = (room.game.turnNumber || 1) + 1;
 
     // 10. Compute updated last 5 calls (newest first)
     const existingLastCalls = Array.isArray(room.game.lastCalledNumbers)
@@ -942,7 +1046,7 @@ export const roomService = {
       : [];
     const updatedLastCalls = [callRecord, ...existingLastCalls].slice(0, 5);
 
-    // 11. Atomic update to guarantee concurrency protection & prevent duplicate calls
+    // 11. Atomic update to record global number call and prevent duplicate / concurrent calls
     const updatedRoom = await RoomModel.findOneAndUpdate(
       {
         roomCode: cleanCode,
@@ -958,9 +1062,6 @@ export const roomService = {
         $set: {
           'game.currentNumber': num,
           'game.currentCallerName': callerName,
-          'game.currentTurnIndex': nextIndex,
-          'game.currentPlayerId': nextPlayerId,
-          'game.turnNumber': nextTurnNumber,
           'game.lastCalledNumbers': updatedLastCalls,
         },
       },
@@ -973,8 +1074,14 @@ export const roomService = {
       if (!freshRoom || !freshRoom.game) {
         return { success: false, statusCode: 404, message: 'Game not found.' };
       }
+      if (freshRoom.status === 'closed') {
+        return { success: false, statusCode: 403, message: 'The room has already been closed.' };
+      }
+      if (freshRoom.game.status === 'won' || freshRoom.game.status === 'ended' || freshRoom.game.status === 'no_winner') {
+        return { success: false, statusCode: 400, message: 'Game has already ended or been won.' };
+      }
       if (freshRoom.game.status !== 'active') {
-        return { success: false, statusCode: 400, message: 'Game has already ended.' };
+        return { success: false, statusCode: 400, message: 'Game is not active.' };
       }
       if (freshRoom.game.calledNumbers.includes(num)) {
         return { success: false, statusCode: 400, message: 'That number has already been called.' };
@@ -985,19 +1092,86 @@ export const roomService = {
       return { success: false, statusCode: 409, message: 'Concurrent call conflict. Please retry.' };
     }
 
-    // 12. Fetch all players and format public DTOs
+    // 12. Fetch all participating players and their submitted boards
     const players = await PlayerModel.find({
       roomCode: cleanCode,
       playerId: { $in: updatedRoom.players },
     }).sort({ joinedAt: 1 });
 
+    // 13. AUTHORITATIVE BINGO EVALUATION ACROSS EVERY PLAYER
+    const bingoResult = bingoService.evaluateAllPlayers(
+      players,
+      updatedRoom.gridSize,
+      updatedRoom.game.calledNumbers,
+      updatedRoom.game.winningWord,
+      cleanPlayerId,
+      frozenOrder
+    );
+
+    // 14. Persist updated completed lines & earned letters for each player
+    for (const p of players) {
+      const pEval = bingoResult.playerEvaluations.get(p.playerId);
+      if (pEval) {
+        p.completedLines = pEval.allCompletedLines;
+        p.earnedLetters = pEval.earnedLetters;
+        p.completedLineCount = pEval.completedLineCount;
+        await PlayerModel.updateOne(
+          { roomCode: cleanCode, playerId: p.playerId },
+          {
+            $set: {
+              completedLines: pEval.allCompletedLines,
+              earnedLetters: pEval.earnedLetters,
+              completedLineCount: pEval.completedLineCount,
+            },
+          }
+        );
+      }
+    }
+
+    // 15. Check Win Condition vs All Numbers Used vs Normal Turn Advancement
+    const maxNumbers = updatedRoom.gridSize * updatedRoom.gridSize;
+
+    if (bingoResult.winner) {
+      // WINNER LOCK: Game is won! Turn does NOT advance to next player.
+      updatedRoom.game.status = 'won';
+      updatedRoom.game.winnerId = bingoResult.winner.playerId;
+      updatedRoom.game.winnerName = bingoResult.winner.playerName;
+      updatedRoom.game.winningNumber = num;
+      updatedRoom.game.wonAt = now;
+      updatedRoom.game.endedAt = now;
+      updatedRoom.game.completedLetters = updatedRoom.game.winningWord.length;
+      updatedRoom.game.winningLines = bingoResult.winner.allCompletedLines;
+      updatedRoom.game.winnerProgress = bingoResult.winner.completedLineCount;
+      updatedRoom.status = 'finished';
+      await updatedRoom.save();
+    } else if (updatedRoom.game.calledNumbers.length >= maxNumbers) {
+      // All numbers exhausted without a winner
+      updatedRoom.game.status = 'no_winner';
+      updatedRoom.game.endedAt = now;
+      updatedRoom.status = 'finished';
+      await updatedRoom.save();
+    } else {
+      // NO WINNER: Advance turn to the next player in frozen rotation order
+      const nextIndex = (updatedRoom.game.currentTurnIndex + 1) % frozenOrder.length;
+      const nextPlayerId = frozenOrder[nextIndex];
+      const nextTurnNumber = (updatedRoom.game.turnNumber || 1) + 1;
+
+      updatedRoom.game.currentTurnIndex = nextIndex;
+      updatedRoom.game.currentPlayerId = nextPlayerId;
+      updatedRoom.game.turnNumber = nextTurnNumber;
+      await updatedRoom.save();
+    }
+
+    // 16. Format safe public DTOs
     const hostPlayer = players.find((p) => p.playerId === updatedRoom.hostPlayerId) || null;
     const publicRoom = formatPublicRoom(updatedRoom, players, hostPlayer);
 
     return {
       success: true,
       statusCode: 200,
-      message: 'Number called successfully.',
+      message: bingoResult.winner
+        ? `Number ${num} called. ${bingoResult.winner.playerName} won the match!`
+        : 'Number called successfully.',
       data: {
         room: publicRoom,
         game: publicRoom.game,
@@ -1008,6 +1182,27 @@ export const roomService = {
           playerName: callerName,
           calledAt: now.toISOString(),
         },
+        winner: bingoResult.winner
+          ? {
+              playerId: bingoResult.winner.playerId,
+              playerName: bingoResult.winner.playerName,
+              winningWord: updatedRoom.game.winningWord,
+              winningNumber: num,
+              wonAt: now.toISOString(),
+              completedLines: bingoResult.winner.allCompletedLines,
+              earnedLetters: bingoResult.winner.earnedLetters,
+            }
+          : null,
+        playerEvaluations: Array.from(bingoResult.playerEvaluations.values()).map((pe) => ({
+          playerId: pe.playerId,
+          playerName: pe.playerName,
+          allCompletedLines: pe.allCompletedLines,
+          newlyCompletedLines: pe.newlyCompletedLines,
+          earnedLetters: pe.earnedLetters,
+          newlyEarnedLetters: pe.newlyEarnedLetters,
+          completedLineCount: pe.completedLineCount,
+          hasWon: pe.hasWon,
+        })),
       },
     };
   },
@@ -1018,19 +1213,7 @@ export const roomService = {
    */
   async callRandomNumber(
     roomCode: string
-  ): Promise<
-    ServiceResult<{
-      room: PublicRoom;
-      game: PublicGameState;
-      calledNumber: number;
-      callRecord: {
-        number: number;
-        playerId: string;
-        playerName: string;
-        calledAt: string;
-      };
-    }>
-  > {
+  ): Promise<ServiceResult<CallNumberResultData>> {
     const cleanCode = roomCode.trim().toUpperCase();
     const room = await RoomModel.findOne({ roomCode: cleanCode });
     if (!room || !room.game || room.game.status !== 'active') {
@@ -1056,5 +1239,417 @@ export const roomService = {
     const callerId = room.game.currentPlayerId || room.hostPlayerId;
 
     return this.callNumber(cleanCode, callerId, pickedNumber);
+  },
+
+  /**
+   * Host restarts a completed/won match without rebuilding the room.
+   * Preserves room, players, submitted boards, winning word, and turn order.
+   */
+  /**
+   * Host continues the match to a new round after a win.
+   * Preserves room, players, submitted boards, winning word, and turn order.
+   * Archives current round in roundHistory and starts Round N+1.
+   */
+  async continueGame(
+    roomCode: string,
+    requesterPlayerId: string
+  ): Promise<ServiceResult<{ room: PublicRoom; game: PublicGameState }>> {
+    const cleanCode = roomCode.trim().toUpperCase();
+    const cleanPlayerId = requesterPlayerId.trim();
+
+    const room = await RoomModel.findOne({ roomCode: cleanCode });
+    if (!room) {
+      return { success: false, statusCode: 404, message: 'Game not found.' };
+    }
+
+    if (room.status === 'closed') {
+      return { success: false, statusCode: 403, message: 'The room has already been closed.' };
+    }
+
+    if (room.hostPlayerId !== cleanPlayerId) {
+      return { success: false, statusCode: 403, message: 'Only the host can continue the game.' };
+    }
+
+    if (!room.game) {
+      return { success: false, statusCode: 400, message: 'No game state found.' };
+    }
+
+    if (room.game.status === 'active') {
+      return { success: false, statusCode: 400, message: 'The game is still active.' };
+    }
+
+    if (room.game.status !== 'won') {
+      return { success: false, statusCode: 400, message: 'Can only continue when a round has been won.' };
+    }
+
+    const players = await PlayerModel.find({
+      roomCode: cleanCode,
+      playerId: { $in: room.players },
+    }).sort({ joinedAt: 1 });
+
+    // Validate that all participants still belong and submitted boards exist
+    const expectedBoardLength = room.gridSize * room.gridSize;
+    const invalidBoards = players.filter((p) => !p.board || p.board.length !== expectedBoardLength);
+    if (invalidBoards.length > 0) {
+      return {
+        success: false,
+        statusCode: 400,
+        message: "Unable to start a new round because a player's board is missing.",
+      };
+    }
+
+    // 1. Snapshot previous round into roundHistory
+    const currentRoundRecord = {
+      roundNumber: room.game.roundNumber || 1,
+      winnerId: room.game.winnerId || null,
+      winnerName: room.game.winnerName || null,
+      winningNumber: room.game.winningNumber ?? null,
+      winningWord: room.game.winningWord || room.winningWord,
+      totalCalls: room.game.calledNumbers ? room.game.calledNumbers.length : 0,
+      startedAt: room.game.startedAt || new Date(),
+      endedAt: room.game.endedAt || room.game.wonAt || new Date(),
+      noWinner: false,
+      playerProgress: players.map((p) => ({
+        playerId: p.playerId,
+        playerName: p.name,
+        earnedLetters: p.earnedLetters || [],
+        completedLines: p.completedLines || [],
+        completedLineCount: p.completedLineCount || 0,
+      })),
+      callHistory: room.game.callHistory || [],
+    };
+
+    // 2. Reset player progress in database
+    await PlayerModel.updateMany(
+      { roomCode: cleanCode },
+      {
+        $set: {
+          completedLines: [],
+          earnedLetters: [],
+          completedLineCount: 0,
+        },
+      }
+    );
+
+    // Synchronize in-memory player instances for formatPublicRoom
+    for (const p of players) {
+      p.completedLines = [];
+      p.earnedLetters = [];
+      p.completedLineCount = 0;
+    }
+
+    // 3. Reset round-specific game state and advance roundNumber
+    const order =
+      room.game.playerOrder && room.game.playerOrder.length > 0
+        ? room.game.playerOrder
+        : room.players;
+    const nextRoundNumber = (room.game.roundNumber || 1) + 1;
+    const existingHistory = Array.isArray(room.game.roundHistory) ? room.game.roundHistory : [];
+
+    room.game.roundHistory = [...existingHistory, currentRoundRecord];
+    room.game.roundNumber = nextRoundNumber;
+    room.game.status = 'active';
+    room.game.startedAt = new Date();
+    room.game.endedAt = null;
+    room.game.turnNumber = 1;
+    room.game.currentTurnIndex = 0;
+    room.game.currentPlayerId = order[0];
+    room.game.currentNumber = null;
+    room.game.currentCallerName = null;
+    room.game.calledNumbers = [];
+    room.game.callHistory = [];
+    room.game.lastCalledNumbers = [];
+    room.game.winnerId = null;
+    room.game.winnerName = null;
+    room.game.winningNumber = null;
+    room.game.wonAt = null;
+    room.game.winningLines = [];
+    room.game.winnerProgress = 0;
+    room.game.completedLetters = 0;
+    room.status = 'playing';
+    await room.save();
+
+    const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
+    const publicRoom = formatPublicRoom(room, players, hostPlayer);
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: `Round ${nextRoundNumber} started successfully.`,
+      data: {
+        room: publicRoom,
+        game: publicRoom.game,
+      },
+    };
+  },
+
+  /**
+   * Host restarts a completed or no-winner match without rebuilding boards.
+   * Preserves room, players, submitted boards, winning word, and turn order.
+   * Archives current round in roundHistory and starts Round N+1.
+   */
+  async restartGame(
+    roomCode: string,
+    requesterPlayerId: string
+  ): Promise<ServiceResult<{ room: PublicRoom; game: PublicGameState }>> {
+    const cleanCode = roomCode.trim().toUpperCase();
+    const cleanPlayerId = requesterPlayerId.trim();
+
+    const room = await RoomModel.findOne({ roomCode: cleanCode });
+    if (!room) {
+      return { success: false, statusCode: 404, message: 'Game not found.' };
+    }
+
+    if (room.status === 'closed') {
+      return { success: false, statusCode: 403, message: 'The room has already been closed.' };
+    }
+
+    if (room.hostPlayerId !== cleanPlayerId) {
+      return { success: false, statusCode: 403, message: 'Only the host can restart the game.' };
+    }
+
+    if (!room.game) {
+      return { success: false, statusCode: 400, message: 'No game state found.' };
+    }
+
+    if (room.game.status === 'active') {
+      return {
+        success: false,
+        statusCode: 400,
+        message: 'The game is still active.',
+      };
+    }
+
+    if (room.game.status !== 'won' && room.game.status !== 'no_winner' && room.game.status !== 'ended') {
+      return {
+        success: false,
+        statusCode: 400,
+        message: 'Cannot restart game while match is active or waiting.',
+      };
+    }
+
+    const players = await PlayerModel.find({
+      roomCode: cleanCode,
+      playerId: { $in: room.players },
+    }).sort({ joinedAt: 1 });
+
+    // Validate that all participants still belong and submitted boards exist
+    const expectedBoardLength = room.gridSize * room.gridSize;
+    const invalidBoards = players.filter((p) => !p.board || p.board.length !== expectedBoardLength);
+    if (invalidBoards.length > 0) {
+      return {
+        success: false,
+        statusCode: 400,
+        message: "Unable to start a new round because a player's board is missing.",
+      };
+    }
+
+    // 1. Snapshot previous round into roundHistory
+    const currentRoundRecord = {
+      roundNumber: room.game.roundNumber || 1,
+      winnerId: room.game.winnerId || null,
+      winnerName: room.game.winnerName || null,
+      winningNumber: room.game.winningNumber ?? null,
+      winningWord: room.game.winningWord || room.winningWord,
+      totalCalls: room.game.calledNumbers ? room.game.calledNumbers.length : 0,
+      startedAt: room.game.startedAt || new Date(),
+      endedAt: room.game.endedAt || new Date(),
+      noWinner: room.game.status === 'no_winner' || !room.game.winnerId,
+      playerProgress: players.map((p) => ({
+        playerId: p.playerId,
+        playerName: p.name,
+        earnedLetters: p.earnedLetters || [],
+        completedLines: p.completedLines || [],
+        completedLineCount: p.completedLineCount || 0,
+      })),
+      callHistory: room.game.callHistory || [],
+    };
+
+    // 2. Reset player progress in database
+    await PlayerModel.updateMany(
+      { roomCode: cleanCode },
+      {
+        $set: {
+          completedLines: [],
+          earnedLetters: [],
+          completedLineCount: 0,
+        },
+      }
+    );
+
+    // Synchronize in-memory player instances for formatPublicRoom
+    for (const p of players) {
+      p.completedLines = [];
+      p.earnedLetters = [];
+      p.completedLineCount = 0;
+    }
+
+    // 3. Reset round-specific game state and advance roundNumber
+    const order =
+      room.game.playerOrder && room.game.playerOrder.length > 0
+        ? room.game.playerOrder
+        : room.players;
+    const nextRoundNumber = (room.game.roundNumber || 1) + 1;
+    const existingHistory = Array.isArray(room.game.roundHistory) ? room.game.roundHistory : [];
+
+    room.game.roundHistory = [...existingHistory, currentRoundRecord];
+    room.game.roundNumber = nextRoundNumber;
+    room.game.status = 'active';
+    room.game.startedAt = new Date();
+    room.game.endedAt = null;
+    room.game.turnNumber = 1;
+    room.game.currentTurnIndex = 0;
+    room.game.currentPlayerId = order[0];
+    room.game.currentNumber = null;
+    room.game.currentCallerName = null;
+    room.game.calledNumbers = [];
+    room.game.callHistory = [];
+    room.game.lastCalledNumbers = [];
+    room.game.winnerId = null;
+    room.game.winnerName = null;
+    room.game.winningNumber = null;
+    room.game.wonAt = null;
+    room.game.winningLines = [];
+    room.game.winnerProgress = 0;
+    room.game.completedLetters = 0;
+    room.status = 'playing';
+    await room.save();
+
+    const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
+    const publicRoom = formatPublicRoom(room, players, hostPlayer);
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: `Round ${nextRoundNumber} restarted successfully.`,
+      data: {
+        room: publicRoom,
+        game: publicRoom.game,
+      },
+    };
+  },
+
+  /**
+   * Host ends the game explicitly and transitions match to ended / Results state.
+   */
+  async endGame(
+    roomCode: string,
+    requesterPlayerId: string
+  ): Promise<ServiceResult<{ room: PublicRoom; game: PublicGameState }>> {
+    const cleanCode = roomCode.trim().toUpperCase();
+    const cleanPlayerId = requesterPlayerId.trim();
+
+    const room = await RoomModel.findOne({ roomCode: cleanCode });
+    if (!room) {
+      return { success: false, statusCode: 404, message: 'Game not found.' };
+    }
+
+    if (room.status === 'closed') {
+      return { success: false, statusCode: 403, message: 'The room has already been closed.' };
+    }
+
+    if (room.hostPlayerId !== cleanPlayerId) {
+      return { success: false, statusCode: 403, message: 'Only the host can end the match.' };
+    }
+
+    const now = new Date();
+    const players = await PlayerModel.find({
+      roomCode: cleanCode,
+      playerId: { $in: room.players },
+    }).sort({ joinedAt: 1 });
+
+    if (room.game) {
+      const wasNoWinner = room.game.status === 'no_winner' || !room.game.winnerId;
+      room.game.status = 'ended';
+      room.game.endedAt = now;
+
+      // Ensure round is recorded in roundHistory
+      const existingHistory = Array.isArray(room.game.roundHistory) ? room.game.roundHistory : [];
+      const currentRoundNum = room.game.roundNumber || 1;
+      const alreadySaved = existingHistory.some((r) => r.roundNumber === currentRoundNum);
+      if (!alreadySaved) {
+        const finalRoundRecord = {
+          roundNumber: currentRoundNum,
+          winnerId: room.game.winnerId || null,
+          winnerName: room.game.winnerName || null,
+          winningNumber: room.game.winningNumber ?? null,
+          winningWord: room.game.winningWord || room.winningWord,
+          totalCalls: room.game.calledNumbers ? room.game.calledNumbers.length : 0,
+          startedAt: room.game.startedAt || now,
+          endedAt: now,
+          noWinner: wasNoWinner,
+          playerProgress: players.map((p) => ({
+            playerId: p.playerId,
+            playerName: p.name,
+            earnedLetters: p.earnedLetters || [],
+            completedLines: p.completedLines || [],
+            completedLineCount: p.completedLineCount || 0,
+          })),
+          callHistory: room.game.callHistory || [],
+        };
+        room.game.roundHistory = [...existingHistory, finalRoundRecord];
+      }
+    }
+    room.status = 'finished';
+    await room.save();
+
+    const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
+    const publicRoom = formatPublicRoom(room, players, hostPlayer);
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Game ended by host.',
+      data: {
+        room: publicRoom,
+        game: publicRoom.game,
+      },
+    };
+  },
+
+  /**
+   * Host permanently closes the entire multiplayer room.
+   */
+  async closeRoom(
+    roomCode: string,
+    requesterPlayerId: string
+  ): Promise<ServiceResult<{ room: PublicRoom; game?: PublicGameState }>> {
+    const cleanCode = roomCode.trim().toUpperCase();
+    const cleanPlayerId = requesterPlayerId.trim();
+
+    const room = await RoomModel.findOne({ roomCode: cleanCode });
+    if (!room) {
+      return { success: false, statusCode: 404, message: 'Room not found.' };
+    }
+
+    if (room.hostPlayerId !== cleanPlayerId) {
+      return { success: false, statusCode: 403, message: 'Only the host can close the room.' };
+    }
+
+    const now = new Date();
+    room.status = 'closed';
+    if (room.game) {
+      room.game.status = 'ended';
+      room.game.endedAt = now;
+    }
+    await room.save();
+
+    const players = await PlayerModel.find({
+      roomCode: cleanCode,
+      playerId: { $in: room.players },
+    }).sort({ joinedAt: 1 });
+
+    const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
+    const publicRoom = formatPublicRoom(room, players, hostPlayer);
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'The host has closed this room.',
+      data: {
+        room: publicRoom,
+        game: publicRoom.game,
+      },
+    };
   },
 };

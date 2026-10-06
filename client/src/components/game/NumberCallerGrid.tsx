@@ -10,6 +10,8 @@ interface NumberCallerGridProps {
   isProcessing: boolean;
   processingNumber: number | null;
   onCallNumber: (num: number) => void;
+  isGameOver?: boolean;
+  gameOverMessage?: string;
   className?: string;
 }
 
@@ -21,6 +23,8 @@ export function NumberCallerGrid({
   isProcessing,
   processingNumber,
   onCallNumber,
+  isGameOver = false,
+  gameOverMessage = 'Match concluded',
   className = '',
 }: NumberCallerGridProps) {
   const totalNumbers = gridSize * gridSize;
@@ -59,9 +63,9 @@ export function NumberCallerGrid({
   const btnDimClass = getButtonDimensions();
 
   return (
-    <div className={`rounded-3xl bg-arcade-card/90 border-2 border-arcade-border p-5 sm:p-6 shadow-arcade-card space-y-4 ${className}`}>
+    <div className={`rounded-3xl bg-arcade-card/90 border-2 border-arcade-border p-4 sm:p-5 shadow-arcade-card space-y-3 flex flex-col justify-between ${className}`}>
       {/* Header with Turn Status & Remaining Counter */}
-      <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-arcade-border/80 text-xs">
+      <div className="flex items-center justify-between flex-wrap gap-2 pb-2.5 border-b border-arcade-border/80 text-xs">
         <div className="flex items-center gap-2">
           <Hash className="w-4 h-4 text-arcade-gold" />
           <span className="font-extrabold text-white uppercase tracking-wider">
@@ -77,7 +81,12 @@ export function NumberCallerGrid({
       </div>
 
       {/* Turn Action Banner */}
-      {isMyTurn ? (
+      {isGameOver ? (
+        <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-xs font-bold text-amber-300 flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-arcade-gold shrink-0" />
+          <span>{gameOverMessage}</span>
+        </div>
+      ) : isMyTurn ? (
         <motion.div
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -106,7 +115,7 @@ export function NumberCallerGrid({
           {numbers.map((num) => {
             const isCalled = calledSet.has(num);
             const isThisProcessing = isProcessing && processingNumber === num;
-            const canCall = isMyTurn && !isCalled && !isProcessing;
+            const canCall = !isGameOver && isMyTurn && !isCalled && !isProcessing;
 
             return (
               <button

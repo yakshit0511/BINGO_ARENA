@@ -11,16 +11,56 @@ const CallRecordSchema = new Schema(
   { _id: false }
 );
 
+const RoundPlayerProgressSchema = new Schema(
+  {
+    playerId: { type: String, required: true },
+    playerName: { type: String, required: true },
+    earnedLetters: { type: [String], default: [] },
+    completedLines: { type: [String], default: [] },
+    completedLineCount: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
+const RoundRecordSchema = new Schema(
+  {
+    roundNumber: { type: Number, required: true },
+    winnerId: { type: String, default: null },
+    winnerName: { type: String, default: null },
+    winningNumber: { type: Number, default: null },
+    winningWord: { type: String, default: '' },
+    totalCalls: { type: Number, default: 0 },
+    startedAt: { type: Date, default: Date.now },
+    endedAt: { type: Date, default: Date.now },
+    noWinner: { type: Boolean, default: false },
+    playerProgress: { type: [RoundPlayerProgressSchema], default: [] },
+    callHistory: { type: [CallRecordSchema], default: [] },
+  },
+  { _id: false }
+);
+
 const GameStateSchema = new Schema(
   {
     status: {
       type: String,
-      enum: ['waiting', 'ready', 'active', 'won', 'ended'],
+      enum: ['waiting', 'ready', 'active', 'won', 'no_winner', 'ended'],
       default: 'waiting',
     },
     startedAt: {
       type: Date,
       default: null,
+    },
+    endedAt: {
+      type: Date,
+      default: null,
+    },
+    roundNumber: {
+      type: Number,
+      default: 1,
+    },
+    roundHistory: {
+      type: [RoundRecordSchema],
+      default: [],
     },
     playerOrder: {
       type: [String],
@@ -62,11 +102,31 @@ const GameStateSchema = new Schema(
       type: String,
       default: null,
     },
+    winnerName: {
+      type: String,
+      default: null,
+    },
+    winningNumber: {
+      type: Number,
+      default: null,
+    },
+    wonAt: {
+      type: Date,
+      default: null,
+    },
     winningWord: {
       type: String,
       default: '',
     },
     completedLetters: {
+      type: Number,
+      default: 0,
+    },
+    winningLines: {
+      type: [String],
+      default: [],
+    },
+    winnerProgress: {
       type: Number,
       default: 0,
     },
@@ -134,6 +194,9 @@ const RoomSchema = new Schema<IRoomDocument>(
       default: () => ({
         status: 'waiting',
         startedAt: null,
+        endedAt: null,
+        roundNumber: 1,
+        roundHistory: [],
         playerOrder: [],
         currentTurnIndex: 0,
         currentPlayerId: null,
@@ -143,12 +206,14 @@ const RoomSchema = new Schema<IRoomDocument>(
         winnerId: null,
         winningWord: '',
         completedLetters: 0,
+        winningLines: [],
+        winnerProgress: 0,
         gamePlayers: [],
       }),
     },
     status: {
       type: String,
-      enum: ['waiting', 'ready', 'playing', 'finished'],
+      enum: ['waiting', 'ready', 'playing', 'finished', 'closed'],
       default: 'waiting',
       index: true,
     },

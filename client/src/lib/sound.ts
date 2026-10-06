@@ -176,6 +176,37 @@ class SoundManager {
   }
 
   /**
+   * Line completed celebratory dual-tone
+   */
+  public playLineCompleted(): void {
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+
+    try {
+      const notes = [587.33, 880, 1174.66]; // D5, A5, D6
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const startTime = ctx.currentTime + idx * 0.09;
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, startTime);
+
+        gain.gain.setValueAtTime(0.12, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.28);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(startTime);
+        osc.stop(startTime + 0.3);
+      });
+    } catch {
+      // Ignored
+    }
+  }
+
+  /**
    * Winner victory chime
    */
   public playWinner(): void {
@@ -200,6 +231,99 @@ class SoundManager {
 
         osc.start(startTime);
         osc.stop(startTime + 0.36);
+      });
+    } catch {
+      // Ignored
+    }
+  }
+
+  /**
+   * New round start sound
+   */
+  public playNewRound(): void {
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+
+    try {
+      const notes = [392, 523.25, 659.25, 783.99]; // G4, C5, E5, G5
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const startTime = ctx.currentTime + idx * 0.08;
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, startTime);
+
+        gain.gain.setValueAtTime(0.12, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.25);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(startTime);
+        osc.stop(startTime + 0.26);
+      });
+    } catch {
+      // Ignored
+    }
+  }
+
+  /**
+   * No winner draw sound
+   */
+  public playNoWinner(): void {
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+
+    try {
+      const notes = [440, 370, 311.13]; // Descending mellow tones
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const startTime = ctx.currentTime + idx * 0.15;
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, startTime);
+
+        gain.gain.setValueAtTime(0.1, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.3);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(startTime);
+        osc.stop(startTime + 0.32);
+      });
+    } catch {
+      // Ignored
+    }
+  }
+
+  /**
+   * Room closed notification sound
+   */
+  public playRoomClosed(): void {
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+
+    try {
+      const notes = [392, 293.66]; // G4, D4
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const startTime = ctx.currentTime + idx * 0.12;
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, startTime);
+
+        gain.gain.setValueAtTime(0.09, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.28);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(startTime);
+        osc.stop(startTime + 0.3);
       });
     } catch {
       // Ignored

@@ -5,10 +5,50 @@ import { CallRecord } from '../../types';
 interface RecentCallsListProps {
   lastCalledNumbers: CallRecord[];
   className?: string;
+  compact?: boolean;
 }
 
-export function RecentCallsList({ lastCalledNumbers, className = '' }: RecentCallsListProps) {
+export function RecentCallsList({ lastCalledNumbers, className = '', compact = false }: RecentCallsListProps) {
   const calls = lastCalledNumbers || [];
+
+  if (compact) {
+    return (
+      <div
+        className={`rounded-2xl bg-arcade-card/80 border border-arcade-border/80 px-3.5 py-2 flex items-center justify-between gap-3 text-xs overflow-x-auto scrollbar-none ${className}`}
+      >
+        <div className="flex items-center gap-1.5 shrink-0 text-arcade-gold font-extrabold uppercase text-[11px]">
+          <History className="w-3.5 h-3.5" />
+          <span>LAST CALLS:</span>
+        </div>
+
+        {calls.length === 0 ? (
+          <span className="text-[11px] text-arcade-muted italic">None yet</span>
+        ) : (
+          <div className="flex items-center gap-2 overflow-x-auto">
+            {calls.map((record, index) => {
+              const isLatest = index === 0;
+              return (
+                <div
+                  key={`${record.number}-${record.calledAt}-${index}`}
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[11px] shrink-0 font-mono ${
+                    isLatest
+                      ? 'bg-amber-500/20 border-amber-400 text-amber-200 font-bold shadow-[0_0_8px_rgba(251,191,36,0.4)]'
+                      : 'bg-arcade-surface/60 border-arcade-border/50 text-slate-300'
+                  }`}
+                >
+                  <span className="font-black text-white">#{record.number}</span>
+                  <span className="text-arcade-muted text-[10px] truncate max-w-[70px]">
+                    {record.playerName || 'Player'}
+                  </span>
+                  {isLatest && <Sparkles className="w-2.5 h-2.5 text-amber-300" />}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div

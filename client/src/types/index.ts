@@ -29,10 +29,13 @@ export interface Player {
   isConnected?: boolean;
   hasSubmitted?: boolean;
   board?: number[];
+  completedLines?: string[];
+  earnedLetters?: string[];
+  completedLineCount?: number;
 }
 
-export type RoomStatus = 'waiting' | 'ready' | 'playing' | 'finished';
-export type GameStatus = 'waiting' | 'ready' | 'active' | 'won' | 'ended';
+export type RoomStatus = 'waiting' | 'ready' | 'playing' | 'finished' | 'closed';
+export type GameStatus = 'waiting' | 'ready' | 'active' | 'won' | 'no_winner' | 'ended';
 
 export interface CallRecord {
   number: number;
@@ -41,9 +44,44 @@ export interface CallRecord {
   calledAt: string;
 }
 
+export interface WinnerInfo {
+  playerId: string;
+  playerName: string;
+  winningWord: string;
+  winningNumber: number;
+  wonAt: string;
+  completedLines: string[];
+  earnedLetters: string[];
+}
+
+export interface RoundPlayerProgress {
+  playerId: string;
+  playerName: string;
+  earnedLetters: string[];
+  completedLines: string[];
+  completedLineCount: number;
+}
+
+export interface RoundRecord {
+  roundNumber: number;
+  winnerId: string | null;
+  winnerName: string | null;
+  winningNumber: number | null;
+  winningWord: string;
+  totalCalls: number;
+  startedAt: string;
+  endedAt: string;
+  noWinner: boolean;
+  playerProgress: RoundPlayerProgress[];
+  callHistory: CallRecord[];
+}
+
 export interface GameState {
   status: GameStatus;
   startedAt: string | null;
+  endedAt?: string | null;
+  roundNumber?: number;
+  roundHistory?: RoundRecord[];
   playerOrder: string[];
   currentTurnIndex: number;
   currentPlayerId: string | null;
@@ -54,8 +92,13 @@ export interface GameState {
   callHistory?: CallRecord[];
   lastCalledNumbers: CallRecord[];
   winnerId: string | null;
+  winnerName?: string | null;
+  winningNumber?: number | null;
+  wonAt?: string | null;
   winningWord: string;
   completedLetters: number;
+  winningLines?: string[];
+  winnerProgress?: number;
   gamePlayers: string[];
 }
 

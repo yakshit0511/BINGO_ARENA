@@ -8,8 +8,8 @@ export interface ApiResponse<T = unknown> {
 }
 
 export type CallingMode = 'random' | 'turn-based';
-export type RoomStatus = 'waiting' | 'ready' | 'playing' | 'finished';
-export type GameStatus = 'waiting' | 'ready' | 'active' | 'won' | 'ended';
+export type RoomStatus = 'waiting' | 'ready' | 'playing' | 'finished' | 'closed';
+export type GameStatus = 'waiting' | 'ready' | 'active' | 'won' | 'no_winner' | 'ended';
 
 export interface GameConfig {
   gridSize: number;
@@ -33,9 +33,48 @@ export interface PublicCallRecord {
   calledAt: string;
 }
 
+export interface RoundPlayerProgress {
+  playerId: string;
+  playerName: string;
+  earnedLetters: string[];
+  completedLines: string[];
+  completedLineCount: number;
+}
+
+export interface IRoundRecord {
+  roundNumber: number;
+  winnerId: string | null;
+  winnerName: string | null;
+  winningNumber: number | null;
+  winningWord: string;
+  totalCalls: number;
+  startedAt: Date;
+  endedAt: Date;
+  noWinner?: boolean;
+  playerProgress?: RoundPlayerProgress[];
+  callHistory?: CallRecord[];
+}
+
+export interface PublicRoundRecord {
+  roundNumber: number;
+  winnerId: string | null;
+  winnerName: string | null;
+  winningNumber: number | null;
+  winningWord: string;
+  totalCalls: number;
+  startedAt: string;
+  endedAt: string;
+  noWinner?: boolean;
+  playerProgress?: RoundPlayerProgress[];
+  callHistory?: PublicCallRecord[];
+}
+
 export interface IGameState {
   status: GameStatus;
   startedAt: Date | null;
+  endedAt?: Date | null;
+  roundNumber?: number;
+  roundHistory?: IRoundRecord[];
   playerOrder: string[];
   currentTurnIndex: number;
   currentPlayerId: string | null;
@@ -46,14 +85,22 @@ export interface IGameState {
   callHistory: CallRecord[];
   lastCalledNumbers: CallRecord[];
   winnerId: string | null;
+  winnerName: string | null;
+  winningNumber: number | null;
+  wonAt: Date | null;
   winningWord: string;
   completedLetters: number;
+  winningLines?: string[];
+  winnerProgress?: number;
   gamePlayers: string[];
 }
 
 export interface PublicGameState {
   status: GameStatus;
   startedAt: string | null;
+  endedAt?: string | null;
+  roundNumber: number;
+  roundHistory: PublicRoundRecord[];
   playerOrder: string[];
   currentTurnIndex: number;
   currentPlayerId: string | null;
@@ -64,8 +111,13 @@ export interface PublicGameState {
   callHistory: PublicCallRecord[];
   lastCalledNumbers: PublicCallRecord[];
   winnerId: string | null;
+  winnerName: string | null;
+  winningNumber: number | null;
+  wonAt: string | null;
   winningWord: string;
   completedLetters: number;
+  winningLines: string[];
+  winnerProgress: number;
   gamePlayers: string[];
 }
 
@@ -80,6 +132,9 @@ export interface IPlayerDocument extends Document {
   submittedAt?: Date;
   joinedAt: Date;
   lastSeenAt: Date;
+  completedLines: string[];
+  earnedLetters: string[];
+  completedLineCount: number;
 }
 
 export interface IRoomDocument extends Document {
@@ -105,6 +160,10 @@ export interface PublicPlayer {
   isConnected: boolean;
   hasSubmitted: boolean;
   joinedAt: string;
+  completedLines?: string[];
+  earnedLetters?: string[];
+  completedLineCount?: number;
+  board?: number[];
 }
 
 export interface PublicRoom {
@@ -145,4 +204,34 @@ export interface JoinRoomInput {
 
 export interface LeaveRoomInput {
   playerId: string;
+}
+
+export interface PublicWinnerInfo {
+  playerId: string;
+  playerName: string;
+  winningWord: string;
+  winningNumber: number;
+  wonAt: string;
+  completedLines: string[];
+  earnedLetters: string[];
+}
+
+export interface PublicPlayerEvaluation {
+  playerId: string;
+  playerName: string;
+  allCompletedLines: string[];
+  newlyCompletedLines: string[];
+  earnedLetters: string[];
+  newlyEarnedLetters: string[];
+  completedLineCount: number;
+  hasWon: boolean;
+}
+
+export interface CallNumberResultData {
+  room: PublicRoom;
+  game: PublicGameState;
+  calledNumber: number;
+  callRecord: PublicCallRecord;
+  winner: PublicWinnerInfo | null;
+  playerEvaluations: PublicPlayerEvaluation[];
 }

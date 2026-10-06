@@ -301,7 +301,7 @@ export async function startGameHandler(req: Request, res: Response): Promise<voi
     : req.params.roomCode;
   const roomCode = String(rawCode || '').trim().toUpperCase();
   const playerId = String(req.body?.playerId || '').trim();
-  const customOrder = req.body?.playerOrder;
+  const customOrder = req.body?.playerOrder || req.body?.customOrder;
 
   if (!roomCode || !playerId) {
     res.status(400).json({
@@ -405,6 +405,9 @@ export async function callNumberHandler(req: Request, res: Response): Promise<vo
       const io: Server | undefined = req.app.get('io');
       if (io) {
         io.to(`room:${roomCode}`).emit('game:number:called', result.data);
+        if (result.data.winner) {
+          io.to(`room:${roomCode}`).emit('game:won', result.data.winner);
+        }
         io.to(`room:${roomCode}`).emit('game:state', result.data.game);
         io.to(`room:${roomCode}`).emit('room:state', result.data.room);
       }
@@ -446,6 +449,9 @@ export async function callRandomNumberHandler(req: Request, res: Response): Prom
       const io: Server | undefined = req.app.get('io');
       if (io) {
         io.to(`room:${roomCode}`).emit('game:number:called', result.data);
+        if (result.data.winner) {
+          io.to(`room:${roomCode}`).emit('game:won', result.data.winner);
+        }
         io.to(`room:${roomCode}`).emit('game:state', result.data.game);
         io.to(`room:${roomCode}`).emit('room:state', result.data.room);
       }
@@ -461,6 +467,180 @@ export async function callRandomNumberHandler(req: Request, res: Response): Prom
     res.status(500).json({
       success: false,
       message: 'Internal server error calling random number.',
+    });
+  }
+}
+
+/**
+ * POST /api/rooms/:roomCode/game/restart
+ * Host restarts match without rebuilding room.
+ */
+export async function restartGameHandler(req: Request, res: Response): Promise<void> {
+  const roomCode = String(req.params.roomCode || '').trim().toUpperCase();
+  const playerId = String(req.body.playerId || '').trim();
+
+  if (!roomCode || !playerId) {
+    res.status(400).json({
+      success: false,
+      message: 'Room code and player ID are required.',
+    });
+    return;
+  }
+
+  try {
+    const result = await roomService.restartGame(roomCode, playerId);
+
+    if (result.success && result.data) {
+      const io: Server | undefined = req.app.get('io');
+      if (io) {
+        io.to(`room:${roomCode}`).emit('game:started', result.data.game);
+        io.to(`room:${roomCode}`).emit('game:state', result.data.game);
+        io.to(`room:${roomCode}`).emit('room:state', result.data.room);
+      }
+    }
+
+    res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error in restartGameHandler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error restarting match.',
+    });
+  }
+}
+
+/**
+ * POST /api/rooms/:roomCode/game/continue
+ * Host continues to a new round after a win.
+ */
+export async function continueGameHandler(req: Request, res: Response): Promise<void> {
+  const roomCode = String(req.params.roomCode || '').trim().toUpperCase();
+  const playerId = String(req.body.playerId || '').trim();
+
+  if (!roomCode || !playerId) {
+    res.status(400).json({
+      success: false,
+      message: 'Room code and player ID are required.',
+    });
+    return;
+  }
+
+  try {
+    const result = await roomService.continueGame(roomCode, playerId);
+
+    if (result.success && result.data) {
+      const io: Server | undefined = req.app.get('io');
+      if (io) {
+        io.to(`room:${roomCode}`).emit('game:continued', result.data.game);
+        io.to(`room:${roomCode}`).emit('game:started', result.data.game);
+        io.to(`room:${roomCode}`).emit('game:state', result.data.game);
+        io.to(`room:${roomCode}`).emit('room:state', result.data.room);
+      }
+    }
+
+    res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error in continueGameHandler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error continuing match.',
+    });
+  }
+}
+
+/**
+ * POST /api/rooms/:roomCode/game/end
+ * Host explicitly ends the game.
+ */
+export async function endGameHandler(req: Request, res: Response): Promise<void> {
+  const roomCode = String(req.params.roomCode || '').trim().toUpperCase();
+  const playerId = String(req.body.playerId || '').trim();
+
+  if (!roomCode || !playerId) {
+    res.status(400).json({
+      success: false,
+      message: 'Room code and player ID are required.',
+    });
+    return;
+  }
+
+  try {
+    const result = await roomService.endGame(roomCode, playerId);
+
+    if (result.success && result.data) {
+      const io: Server | undefined = req.app.get('io');
+      if (io) {
+        io.to(`room:${roomCode}`).emit('game:ended', result.data.game);
+        io.to(`room:${roomCode}`).emit('game:state', result.data.game);
+        io.to(`room:${roomCode}`).emit('room:state', result.data.room);
+      }
+    }
+
+    res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error in endGameHandler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error ending match.',
+    });
+  }
+}
+
+/**
+ * POST /api/rooms/:roomCode/close
+ * Host closes the entire room session.
+ */
+export async function closeRoomHandler(req: Request, res: Response): Promise<void> {
+  const roomCode = String(req.params.roomCode || '').trim().toUpperCase();
+  const playerId = String(req.body.playerId || '').trim();
+
+  if (!roomCode || !playerId) {
+    res.status(400).json({
+      success: false,
+      message: 'Room code and player ID are required.',
+    });
+    return;
+  }
+
+  try {
+    const result = await roomService.closeRoom(roomCode, playerId);
+
+    if (result.success && result.data) {
+      const io: Server | undefined = req.app.get('io');
+      if (io) {
+        io.to(`room:${roomCode}`).emit('room:closed', {
+          roomCode,
+          message: 'The host has closed this room.',
+        });
+        if (result.data.game) {
+          io.to(`room:${roomCode}`).emit('game:state', result.data.game);
+        }
+        io.to(`room:${roomCode}`).emit('room:state', result.data.room);
+      }
+    }
+
+    res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('Error in closeRoomHandler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error closing room.',
     });
   }
 }

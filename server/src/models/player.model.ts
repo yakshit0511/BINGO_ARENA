@@ -43,6 +43,18 @@ const PlayerSchema = new Schema<IPlayerDocument>(
       type: Date,
       default: undefined,
     },
+    completedLines: {
+      type: [String],
+      default: [],
+    },
+    earnedLetters: {
+      type: [String],
+      default: [],
+    },
+    completedLineCount: {
+      type: Number,
+      default: 0,
+    },
     joinedAt: {
       type: Date,
       default: Date.now,
