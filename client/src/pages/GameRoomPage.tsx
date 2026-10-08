@@ -199,6 +199,7 @@ export function GameRoomPage() {
         <ActiveGameView
           room={currentRoom}
           currentPlayer={currentPlayer}
+          onRoomUpdate={setCurrentRoom}
           onExit={() => {
             clearPlayerSession();
             navigate('/');

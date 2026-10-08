@@ -43,9 +43,10 @@ interface ActiveGameViewProps {
   room: Room;
   currentPlayer: Player;
   onExit?: () => void;
+  onRoomUpdate?: (room: Room) => void;
 }
 
-export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: ActiveGameViewProps) {
+export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoomUpdate }: ActiveGameViewProps) {
   const navigate = useNavigate();
   const [room, setRoom] = useState<Room>(initialRoom);
   const [isSoundOn, setIsSoundOn] = useState(() => soundManager.isSoundEnabled());
@@ -220,22 +221,62 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
   useEffect(() => {
     const socket = getSocket();
 
+    // Ensure socket joins this room's channel immediately on mount
+    joinRoomSocket(room.roomCode, currentPlayer.id).then((res) => {
+      if (res.success && res.room) {
+        const clientRoom = mapBackendRoomToClient(res.room as BackendPublicRoom);
+        setRoom(clientRoom);
+        onRoomUpdate?.(clientRoom);
+      }
+    });
+
     const handleRoomState = (rawRoom: BackendPublicRoom) => {
       if (rawRoom && rawRoom.roomCode === room.roomCode) {
-        setRoom(mapBackendRoomToClient(rawRoom));
+        const clientRoom = mapBackendRoomToClient(rawRoom);
+        setRoom(clientRoom);
+        onRoomUpdate?.(clientRoom);
       }
     };
 
-    const handleGameState = (rawRoom: BackendPublicRoom) => {
-      if (rawRoom && rawRoom.roomCode === room.roomCode) {
-        setRoom(mapBackendRoomToClient(rawRoom));
+    const handleGameState = (gameData: any) => {
+      if (gameData && (gameData.calledNumbers || gameData.status || gameData.currentPlayerId)) {
+        setRoom((prev) => {
+          const updated = {
+            ...prev,
+            game: {
+              ...(prev.game || {}),
+              ...gameData,
+            },
+          };
+          onRoomUpdate?.(updated);
+          return updated;
+        });
       }
     };
 
-    const handleNumberCalled = (data: { room?: BackendPublicRoom; number?: number }) => {
+    const handleNumberCalled = (data: { room?: BackendPublicRoom; game?: any; calledNumber?: number }) => {
       soundManager.playNumberCall();
       if (data?.room && data.room.roomCode === room.roomCode) {
-        setRoom(mapBackendRoomToClient(data.room));
+        const clientRoom = mapBackendRoomToClient(data.room);
+        setRoom(clientRoom);
+        onRoomUpdate?.(clientRoom);
+      } else if (data?.calledNumber) {
+        setRoom((prev) => {
+          const currentCalled = prev.game?.calledNumbers || [];
+          if (!currentCalled.includes(data.calledNumber!)) {
+            const updated = {
+              ...prev,
+              game: {
+                ...(prev.game || {}),
+                currentNumber: data.calledNumber!,
+                calledNumbers: [...currentCalled, data.calledNumber!],
+              } as GameState,
+            };
+            onRoomUpdate?.(updated);
+            return updated;
+          }
+          return prev;
+        });
       }
       setIsCallingNumber(false);
       setCallingNumberVal(null);
@@ -253,21 +294,27 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     const handleGameStarted = (data: { room?: BackendPublicRoom }) => {
       soundManager.playGameStart();
       if (data?.room && data.room.roomCode === room.roomCode) {
-        setRoom(mapBackendRoomToClient(data.room));
+        const clientRoom = mapBackendRoomToClient(data.room);
+        setRoom(clientRoom);
+        onRoomUpdate?.(clientRoom);
       }
     };
 
     const handleGameContinued = (data: { room?: BackendPublicRoom }) => {
       soundManager.playNewRound();
       if (data?.room && data.room.roomCode === room.roomCode) {
-        setRoom(mapBackendRoomToClient(data.room));
+        const clientRoom = mapBackendRoomToClient(data.room);
+        setRoom(clientRoom);
+        onRoomUpdate?.(clientRoom);
       }
     };
 
     const handleGameRematch = (data: { room?: BackendPublicRoom }) => {
       soundManager.playNewRound();
       if (data?.room && data.room.roomCode === room.roomCode) {
-        setRoom(mapBackendRoomToClient(data.room));
+        const clientRoom = mapBackendRoomToClient(data.room);
+        setRoom(clientRoom);
+        onRoomUpdate?.(clientRoom);
       }
     };
 
@@ -277,7 +324,11 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
 
     const handleRoomClosed = () => {
       soundManager.playRoomClosed();
-      setRoom((prev) => ({ ...prev, status: 'closed' }));
+      setRoom((prev) => {
+        const closed = { ...prev, status: 'closed' as const };
+        onRoomUpdate?.(closed);
+        return closed;
+      });
     };
 
     const handleGameError = (data: { message?: string }) => {
@@ -293,12 +344,16 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
         // Re-sync authoritative room and game state on reconnect
         joinRoomSocket(room.roomCode, currentPlayer.id).then((res) => {
           if (res.success && res.room) {
-            setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
+            const clientRoom = mapBackendRoomToClient(res.room as BackendPublicRoom);
+            setRoom(clientRoom);
+            onRoomUpdate?.(clientRoom);
           }
         });
         requestGameStateSocket(room.roomCode).then((res) => {
           if (res.success && res.room) {
-            setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
+            const clientRoom = mapBackendRoomToClient(res.room as BackendPublicRoom);
+            setRoom(clientRoom);
+            onRoomUpdate?.(clientRoom);
           }
         });
       }
@@ -344,7 +399,6 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     };
   }, [room.roomCode, currentPlayer.id, navigate]);
 
-
   // Handler for caller selecting a number from the grid
   const handleCallNumber = async (num: number) => {
     if (isGameOver || !isMyTurn || isCallingNumber) return;
@@ -353,13 +407,41 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
     setCallingNumberVal(num);
     setCallError(null);
 
+    // INSTANT OPTIMISTIC UI: Audio chime + immediate visual mark
+    soundManager.playNumberCall();
+
+    const prevRoom = room;
+    const currentCalled = room.game?.calledNumbers || [];
+    if (!currentCalled.includes(num)) {
+      const nextCalled = [...currentCalled, num];
+      const optimisticGame: GameState = {
+        ...room.game!,
+        currentNumber: num,
+        calledNumbers: nextCalled,
+        lastCalledNumbers: [
+          {
+            number: num,
+            playerId: currentPlayer.id,
+            playerName: currentPlayer.name,
+            calledAt: new Date().toISOString(),
+          },
+          ...(room.game?.lastCalledNumbers || []),
+        ].slice(0, 5),
+      };
+      const optimisticRoom: Room = {
+        ...room,
+        game: optimisticGame,
+      };
+      setRoom(optimisticRoom);
+      onRoomUpdate?.(optimisticRoom);
+    }
+
     try {
       // 1. Attempt via Socket.IO
       let res = await callNumberSocket(room.roomCode, currentPlayer.id, num);
 
       // 2. If Socket timed out or failed, fallback to REST API
       if (!res.success) {
-        console.warn('[ActiveGameView] Socket callNumber failed or timed out, trying REST fallback:', res.message);
         const restRes = await roomService.callNumber(room.roomCode, currentPlayer.id, num);
         if (restRes.success && restRes.data) {
           res = {
@@ -368,16 +450,31 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
             game: restRes.data.game,
           };
         } else {
+          // If already called on the server, treat as success & sync latest room
+          if (restRes.message?.includes('already been called')) {
+            const fresh = await roomService.getRoom(room.roomCode);
+            if (fresh.success && fresh.data) {
+              setRoom(fresh.data);
+              onRoomUpdate?.(fresh.data);
+              return;
+            }
+          }
+          // Rollback optimistic update on error
+          setRoom(prevRoom);
+          onRoomUpdate?.(prevRoom);
           setCallError(restRes.message || res.message || 'Failed to call number.');
           return;
         }
       }
 
-      soundManager.playNumberCall();
       if (res.room) {
-        setRoom(mapBackendRoomToClient(res.room as BackendPublicRoom));
+        const clientRoom = mapBackendRoomToClient(res.room as BackendPublicRoom);
+        setRoom(clientRoom);
+        onRoomUpdate?.(clientRoom);
       }
     } catch (err: unknown) {
+      setRoom(prevRoom);
+      onRoomUpdate?.(prevRoom);
       const msg = err instanceof Error ? err.message : 'Network error calling number';
       setCallError(msg);
     } finally {

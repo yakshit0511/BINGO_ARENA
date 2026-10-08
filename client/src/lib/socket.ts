@@ -4,16 +4,17 @@ function resolveSocketUrl(): string {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
-    if (!isLocal) {
-      const envUrl =
-        import.meta.env.VITE_SOCKET_URL ||
-        import.meta.env.VITE_API_BASE_URL ||
-        import.meta.env.VITE_API_URL;
-      if (envUrl && envUrl.startsWith('https://')) {
-        return envUrl.replace(/\/+$/, '');
-      }
-      return 'https://bingo-arena-92ne.onrender.com';
+    if (isLocal) {
+      return import.meta.env.VITE_LOCAL_SOCKET_URL || 'http://localhost:5001';
     }
+    const envUrl =
+      import.meta.env.VITE_SOCKET_URL ||
+      import.meta.env.VITE_API_BASE_URL ||
+      import.meta.env.VITE_API_URL;
+    if (envUrl && envUrl.startsWith('https://')) {
+      return envUrl.replace(/\/+$/, '');
+    }
+    return 'https://bingo-arena-92ne.onrender.com';
   }
 
   const raw =
