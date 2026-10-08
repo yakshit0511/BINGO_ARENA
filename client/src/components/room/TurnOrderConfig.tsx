@@ -60,16 +60,18 @@ export function TurnOrderConfig({
       const validExisting = order.filter((id) => playerIds.includes(id));
       const updatedOrder = [...validExisting, ...remaining];
       setOrder(updatedOrder);
-      onOrderChange(updatedOrder);
+      if (isHost && !disabled) {
+        onOrderChange(updatedOrder);
+      }
     }
-  }, [configuredOrder, players]);
+  }, [configuredOrder, players, isHost, disabled]);
 
-  // Ensure parent is notified of the active order on mount if configuredOrder is empty
+  // Ensure parent is notified of the active order on mount if configuredOrder is empty (Host only)
   useEffect(() => {
-    if (order.length > 0 && (!configuredOrder || configuredOrder.length !== order.length)) {
+    if (isHost && !disabled && order.length > 0 && (!configuredOrder || configuredOrder.length !== order.length)) {
       onOrderChange(order);
     }
-  }, [order, configuredOrder, onOrderChange]);
+  }, [order, configuredOrder, onOrderChange, isHost, disabled]);
 
   // Handle Move Up
   const handleMoveUp = (index: number) => {

@@ -354,7 +354,10 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
 
         const result = await roomService.updateTurnOrder(roomCode, playerId, playerOrder);
         if (!result.success || !result.data) {
-          socket.emit('game:error', { message: result.message });
+          // Do not emit disruptive game:error toast if the match has already launched
+          if (!result.message?.includes('after the game has started')) {
+            socket.emit('game:error', { message: result.message });
+          }
           if (typeof callback === 'function') {
             callback({ success: false, message: result.message });
           }

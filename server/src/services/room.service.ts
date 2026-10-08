@@ -1254,24 +1254,30 @@ export const roomService = {
       frozenOrder
     );
 
-    // 14. Persist updated completed lines & earned letters for each player
+    // 14. Persist updated completed lines & earned letters for each player in parallel via bulkWrite
+    const bulkOps = [];
     for (const p of players) {
       const pEval = bingoResult.playerEvaluations.get(p.playerId);
       if (pEval) {
         p.completedLines = pEval.allCompletedLines;
         p.earnedLetters = pEval.earnedLetters;
         p.completedLineCount = pEval.completedLineCount;
-        await PlayerModel.updateOne(
-          { roomCode: cleanCode, playerId: p.playerId },
-          {
-            $set: {
-              completedLines: pEval.allCompletedLines,
-              earnedLetters: pEval.earnedLetters,
-              completedLineCount: pEval.completedLineCount,
+        bulkOps.push({
+          updateOne: {
+            filter: { roomCode: cleanCode, playerId: p.playerId },
+            update: {
+              $set: {
+                completedLines: pEval.allCompletedLines,
+                earnedLetters: pEval.earnedLetters,
+                completedLineCount: pEval.completedLineCount,
+              },
             },
-          }
-        );
+          },
+        });
       }
+    }
+    if (bulkOps.length > 0) {
+      await PlayerModel.bulkWrite(bulkOps, { ordered: false });
     }
 
     // 15. AUTHORITATIVE "ONLY ONE LOSER" EVALUATION ACROSS PLAYERS

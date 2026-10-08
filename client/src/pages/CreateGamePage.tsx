@@ -436,13 +436,52 @@ export function CreateGamePage() {
           </div>
         </div>
 
-        {/* Right Column: Sticky Live Preview (5 cols) */}
+        {/* Right Column: Sticky Live Preview & Blueprint (5 cols) */}
         <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
           <DynamicGridPreview config={currentConfig} hostName={hostName} />
 
-          <div className="p-4 rounded-xl bg-arcade-surface/60 border border-arcade-border text-xs text-slate-400 flex items-start gap-2.5">
+          {/* Quick Match Blueprint Card */}
+          <div className="rounded-2xl bg-arcade-card/90 border border-arcade-border/80 p-4 space-y-3 shadow-arcade-card">
+            <div className="flex items-center justify-between pb-2 border-b border-arcade-border/60">
+              <span className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-arcade-gold" />
+                <span>Arena Blueprint</span>
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-arcade-purple/20 border border-arcade-purple/40 text-fuchsia-300">
+                {isFormValid ? 'Ready to Launch' : 'Drafting Rules'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 rounded-xl bg-arcade-bg/70 border border-arcade-border/50">
+                <span className="text-[10px] uppercase font-bold text-arcade-muted block">Matrix Grid</span>
+                <span className="text-white font-mono font-bold">{gridSize}×{gridSize} ({gridSize * gridSize} Nos)</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-arcade-bg/70 border border-arcade-border/50">
+                <span className="text-[10px] uppercase font-bold text-arcade-muted block">Winning Word</span>
+                <span className="text-arcade-gold font-mono font-bold tracking-widest">{currentConfig.winningWord || '—'}</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-arcade-bg/70 border border-arcade-border/50">
+                <span className="text-[10px] uppercase font-bold text-arcade-muted block">Player Cap</span>
+                <span className="text-slate-200 font-bold">{playerLimit} Players Max</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-arcade-bg/70 border border-arcade-border/50">
+                <span className="text-[10px] uppercase font-bold text-arcade-muted block">Marking Mode</span>
+                <span className={markingMode === 'auto' ? 'text-cyan-300 font-bold' : 'text-purple-300 font-bold'}>
+                  {markingMode === 'auto' ? '⚡ Auto-Daub' : '👆 Manual'}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-arcade-muted flex items-center justify-between pt-1">
+              <span>Host Role: <strong className="text-white">{hostParticipates ? 'Player & Host' : 'Spectator Host'}</strong></span>
+              <span>Calling: <strong className="text-arcade-gold capitalize">{callingMode}</strong></span>
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-arcade-surface/60 border border-arcade-border text-xs text-slate-400 flex items-start gap-2.5">
             <HelpCircle className="w-4 h-4 text-arcade-gold shrink-0 mt-0.5" />
-            <div>
+            <div className="leading-relaxed">
               <strong className="text-white">Rule Verification: </strong>
               Each completed row, column, or diagonal line in the matrix will light up one letter of your winning word (<strong>{currentConfig.winningWord}</strong>) until a player completes all {gridSize} letters.
             </div>

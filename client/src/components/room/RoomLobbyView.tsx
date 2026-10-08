@@ -139,6 +139,8 @@ export function RoomLobbyView({
     // 5. Game started listener - switches to active game instantly
     const handleGameStarted = (data: any) => {
       soundManager.playGameStart();
+      setIsStarting(false);
+      setStartError(null);
       if (data?.room) {
         const clientRoom = mapBackendRoomToClient(data.room);
         setRoom(clientRoom);
@@ -194,6 +196,10 @@ export function RoomLobbyView({
     // 9. Game error listener
     const handleGameError = (data: { message?: string }) => {
       if (data?.message) {
+        // Suppress turn order error if game is launching or already playing
+        if (data.message.includes('Turn order cannot be modified') && (isStarting || room.status === 'playing')) {
+          return;
+        }
         setStartError(data.message);
       }
     };
@@ -260,13 +266,18 @@ export function RoomLobbyView({
   };
 
   const handleTurnOrderChange = async (newOrder: string[]) => {
+    if (!isHost || isStarting || room.status === 'playing' || room.game?.status === 'active') {
+      return;
+    }
     setConfiguredTurnOrder(newOrder);
     setStartError(null);
     try {
       await updateTurnOrderSocket(room.roomCode, currentPlayer.id, newOrder);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update turn order';
-      setStartError(msg);
+      if (!msg.includes('after the game has started')) {
+        setStartError(msg);
+      }
     }
   };
 
@@ -335,6 +346,13 @@ export function RoomLobbyView({
           setRoom(restRes.data.room);
           onRoomUpdate?.(restRes.data.room);
           return;
+        } else if (restRes.message?.includes('already started') || res.message?.includes('already started')) {
+          const fresh = await roomService.getRoom(room.roomCode);
+          if (fresh.success && fresh.data) {
+            setRoom(fresh.data);
+            onRoomUpdate?.(fresh.data);
+            return;
+          }
         } else {
           setStartError(restRes.message || res.message || 'Failed to start game.');
           return;
@@ -358,14 +376,29 @@ export function RoomLobbyView({
         const restRes = await roomService.startGame(
           room.roomCode,
           currentPlayer.id,
-          configuredTurnOrder
+          orderToSend
         );
         if (restRes.success && restRes.data) {
           setRoom(restRes.data.room);
+          onRoomUpdate?.(restRes.data.room);
           return;
+        }
+        if (restRes.message?.includes('already started')) {
+          const fresh = await roomService.getRoom(room.roomCode);
+          if (fresh.success && fresh.data) {
+            setRoom(fresh.data);
+            onRoomUpdate?.(fresh.data);
+            return;
+          }
         }
         setStartError(restRes.message || 'Failed to start game.');
       } catch {
+        const fresh = await roomService.getRoom(room.roomCode);
+        if (fresh.success && fresh.data && fresh.data.status === 'playing') {
+          setRoom(fresh.data);
+          onRoomUpdate?.(fresh.data);
+          return;
+        }
         const msg = err instanceof Error ? err.message : 'Error starting game';
         setStartError(msg);
       }
@@ -699,7 +732,7 @@ export function RoomLobbyView({
                 isHost={isHost}
                 configuredOrder={configuredTurnOrder}
                 onOrderChange={handleTurnOrderChange}
-                disabled={isStarting}
+                disabled={isStarting || (room.status as string) === 'playing' || !isHost}
               />
             )}
 

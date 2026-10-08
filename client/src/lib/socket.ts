@@ -215,7 +215,7 @@ export function submitBoardSocket(
     cells,
   };
 
-  return emitWithTimeout(socket, 'board:submit', payload, 1800, 'Board submit socket timed out.');
+  return emitWithTimeout(socket, 'board:submit', payload, 5000, 'Board submit socket timed out.');
 }
 
 /**
@@ -233,7 +233,7 @@ export function updateTurnOrderSocket(
     playerOrder,
   };
 
-  return emitWithTimeout(socket, 'room:turn-order:update', payload, 1800, 'Turn order socket timed out.');
+  return emitWithTimeout(socket, 'room:turn-order:update', payload, 4500, 'Turn order socket timed out.');
 }
 
 /**
@@ -251,7 +251,7 @@ export function kickPlayerSocket(
     targetPlayerId: targetPlayerId.trim(),
   };
 
-  return emitWithTimeout(socket, 'room:player:kick', payload, 1800, 'Kick player socket timed out.');
+  return emitWithTimeout(socket, 'room:player:kick', payload, 4500, 'Kick player socket timed out.');
 }
 
 /**
@@ -269,7 +269,7 @@ export function updateMarkingModeSocket(
     markingMode,
   };
 
-  return emitWithTimeout(socket, 'room:marking-mode:update', payload, 1800, 'Update marking mode socket timed out.');
+  return emitWithTimeout(socket, 'room:marking-mode:update', payload, 4000, 'Update marking mode socket timed out.');
 }
 
 /**
@@ -287,7 +287,7 @@ export function startGameSocket(
     playerOrder,
   };
 
-  return emitWithTimeout(socket, 'game:start', payload, 1800, 'Game start socket timed out.');
+  return emitWithTimeout(socket, 'game:start', payload, 6000, 'Game start socket timed out.');
 }
 
 /**
@@ -305,7 +305,7 @@ export function callNumberSocket(
     number,
   };
 
-  return emitWithTimeout(socket, 'game:number:call', payload, 1800, 'Call number socket timed out.');
+  return emitWithTimeout(socket, 'game:number:call', payload, 5000, 'Call number socket timed out.');
 }
 
 /**
@@ -317,7 +317,7 @@ export function requestGameStateSocket(
   const socket = getSocket();
   const payload = { roomCode: roomCode.trim().toUpperCase() };
 
-  return emitWithTimeout(socket, 'game:request-state', payload, 1800, 'Request game state socket timed out.');
+  return emitWithTimeout(socket, 'game:request-state', payload, 4000, 'Request game state socket timed out.');
 }
 
 /**
@@ -333,7 +333,7 @@ export function restartGameSocket(
     playerId: playerId.trim(),
   };
 
-  return emitWithTimeout(socket, 'game:restart', payload, 1800, 'Restart match socket timed out.');
+  return emitWithTimeout(socket, 'game:restart', payload, 5000, 'Restart match socket timed out.');
 }
 
 /**
@@ -349,7 +349,7 @@ export function continueGameSocket(
     playerId: playerId.trim(),
   };
 
-  return emitWithTimeout(socket, 'game:continue', payload, 1800, 'Continue match socket timed out.');
+  return emitWithTimeout(socket, 'game:continue', payload, 5000, 'Continue match socket timed out.');
 }
 
 /**
@@ -365,7 +365,7 @@ export function endGameSocket(
     playerId: playerId.trim(),
   };
 
-  return emitWithTimeout(socket, 'game:end', payload, 1800, 'End game socket timed out.');
+  return emitWithTimeout(socket, 'game:end', payload, 5000, 'End game socket timed out.');
 }
 
 /**
@@ -381,7 +381,7 @@ export function closeRoomSocket(
     playerId: playerId.trim(),
   };
 
-  return emitWithTimeout(socket, 'room:close', payload, 1800, 'Close room socket timed out.');
+  return emitWithTimeout(socket, 'room:close', payload, 5000, 'Close room socket timed out.');
 }
 
 /**

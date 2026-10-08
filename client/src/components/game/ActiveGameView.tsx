@@ -668,20 +668,21 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
       {/* UNIVERSAL REAL-TIME LETTER UNLOCKED POP-UP (SHOWN TO ALL PLAYERS) */}
       <AnimatePresence>
         {letterAchievement && (
-          <motion.div
-            key={letterAchievement.id}
-            initial={{ opacity: 0, y: -50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-            className="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4 pointer-events-auto"
-          >
-            <div className="relative rounded-2xl bg-gradient-to-r from-arcade-card via-slate-900 to-arcade-surface border-2 border-amber-400 p-4 shadow-[0_0_35px_rgba(251,191,36,0.65),0_10px_25px_rgba(0,0,0,0.85)] backdrop-blur-md flex items-center justify-between gap-3.5">
-              <div className="flex items-center gap-3 min-w-0">
-                {/* Glowing Unlocked Letter Tile */}
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 border-2 border-yellow-200 text-slate-950 font-mono font-black text-2xl flex items-center justify-center shadow-[0_0_20px_rgba(251,191,36,0.85)] shrink-0 animate-bounce">
-                  🏆
-                </div>
+          <div className="fixed top-20 inset-x-0 z-50 flex justify-center px-4 pointer-events-none">
+            <motion.div
+              key={letterAchievement.id}
+              initial={{ opacity: 0, y: -25, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{ type: 'spring', damping: 22, stiffness: 320 }}
+              className="pointer-events-auto w-full max-w-md shadow-2xl"
+            >
+              <div className="relative rounded-2xl bg-gradient-to-r from-arcade-card via-slate-900 to-arcade-surface border-2 border-amber-400 p-4 shadow-[0_0_35px_rgba(251,191,36,0.65),0_10px_25px_rgba(0,0,0,0.85)] backdrop-blur-md flex items-center justify-between gap-3.5">
+                <div className="flex items-center gap-3 min-w-0">
+                  {/* Glowing Unlocked Letter Tile */}
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 border-2 border-yellow-200 text-slate-950 font-mono font-black text-2xl flex items-center justify-center shadow-[0_0_20px_rgba(251,191,36,0.85)] shrink-0 animate-bounce">
+                    🏆
+                  </div>
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-amber-300">
@@ -715,8 +716,9 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
               </button>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
+    </AnimatePresence>
 
       {/* 1. COMPACT COMMAND HUD (Turn Status, Compact Current Number Box, Winning Target) */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch">
@@ -855,7 +857,7 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit }: Act
       )}
 
       {/* MOBILE SCREEN SWITCHER CONTROLS (Only on screens below lg) */}
-      <div className="lg:hidden flex items-center justify-between gap-1 p-1 bg-arcade-surface/90 border border-arcade-border rounded-2xl shadow-sm">
+      <div className="lg:hidden sticky top-16 z-30 flex items-center justify-between gap-1 p-1 bg-arcade-bg/95 backdrop-blur-md border border-arcade-border/80 rounded-2xl shadow-lg my-1">
         <button
           type="button"
           onClick={() => setMobileView('both')}
