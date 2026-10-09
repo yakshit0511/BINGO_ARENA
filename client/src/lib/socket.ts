@@ -216,7 +216,7 @@ export function submitBoardSocket(
     cells,
   };
 
-  return emitWithTimeout(socket, 'board:submit', payload, 5000, 'Board submit socket timed out.');
+  return emitWithTimeout(socket, 'board:submit', payload, 2000, 'Board submit socket timed out.');
 }
 
 /**

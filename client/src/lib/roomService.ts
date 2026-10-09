@@ -95,7 +95,30 @@ export interface BackendRoomResponseData {
  * Maps server-authoritative PublicRoom payload to client Room model
  */
 export function mapBackendRoomToClient(backendRoom: BackendPublicRoom): Room {
-  const players: Player[] = backendRoom.players.map((p, idx) => {
+  if (!backendRoom || typeof backendRoom !== 'object') {
+    return {
+      roomCode: '',
+      hostId: '',
+      hostName: '',
+      config: {
+        gridSize: 5,
+        playerLimit: 10,
+        winningWord: 'BINGO',
+        callingMode: 'turn-based',
+        hostParticipates: true,
+        markingMode: 'auto',
+      },
+      players: [],
+      status: 'waiting',
+      markingMode: 'auto',
+      allSubmitted: false,
+      turnOrder: [],
+      createdAt: Date.now(),
+    };
+  }
+
+  const rawPlayers = Array.isArray(backendRoom.players) ? backendRoom.players : [];
+  const players: Player[] = rawPlayers.map((p, idx) => {
     const avatarColors = ['#7C3AED', '#D946EF', '#F59E0B', '#EC4899', '#10B981', '#3B82F6'];
     const color = p.isHost ? '#7C3AED' : avatarColors[(idx + 1) % avatarColors.length];
 
@@ -104,7 +127,7 @@ export function mapBackendRoomToClient(backendRoom: BackendPublicRoom): Room {
       name: p.name,
       isHost: p.isHost,
       isReady: p.hasSubmitted,
-      joinedAt: new Date(p.joinedAt).getTime(),
+      joinedAt: p.joinedAt ? new Date(p.joinedAt).getTime() : Date.now(),
       avatarColor: color,
       isConnected: p.isConnected !== false,
       hasSubmitted: p.hasSubmitted,
@@ -116,23 +139,23 @@ export function mapBackendRoomToClient(backendRoom: BackendPublicRoom): Room {
   });
 
   return {
-    roomCode: backendRoom.roomCode,
-    hostId: backendRoom.host.playerId,
-    hostName: backendRoom.host.name,
+    roomCode: backendRoom.roomCode || '',
+    hostId: backendRoom.host?.playerId || '',
+    hostName: backendRoom.host?.name || '',
     config: {
-      gridSize: backendRoom.gridSize,
-      playerLimit: backendRoom.playerLimit,
-      winningWord: backendRoom.winningWord,
-      callingMode: backendRoom.callingMode,
-      hostParticipates: backendRoom.hostParticipates,
+      gridSize: backendRoom.gridSize || 5,
+      playerLimit: backendRoom.playerLimit || 10,
+      winningWord: backendRoom.winningWord || 'BINGO',
+      callingMode: backendRoom.callingMode || 'turn-based',
+      hostParticipates: backendRoom.hostParticipates !== false,
       markingMode: backendRoom.markingMode || 'auto',
     },
     players,
-    status: backendRoom.status.toLowerCase() as RoomStatus,
+    status: (backendRoom.status ? backendRoom.status.toLowerCase() : 'waiting') as RoomStatus,
     markingMode: backendRoom.markingMode || 'auto',
     allSubmitted:
       backendRoom.allSubmitted ??
-      (backendRoom.players.length > 0 && backendRoom.players.every((p) => p.hasSubmitted)),
+      (players.length > 0 && players.every((p) => p.hasSubmitted)),
     turnOrder: backendRoom.turnOrder || [],
     game: backendRoom.game
       ? {
@@ -165,7 +188,7 @@ export function mapBackendRoomToClient(backendRoom: BackendPublicRoom): Room {
           gamePlayers: backendRoom.game.gamePlayers || [],
         }
       : undefined,
-    createdAt: new Date(backendRoom.createdAt).getTime(),
+    createdAt: backendRoom.createdAt ? new Date(backendRoom.createdAt).getTime() : Date.now(),
   };
 }
 
@@ -318,8 +341,16 @@ export const roomService = {
    * Fetch latest room details from GET /api/rooms/:roomCode
    */
   async getRoom(roomCode: string): Promise<ApiResponse<Room>> {
+    const cleanCode = roomCode.trim().toUpperCase();
     try {
-      const response = await fetch(`${API_BASE_URL}/api/rooms/${roomCode.trim().toUpperCase()}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const response = await fetch(`${API_BASE_URL}/api/rooms/${cleanCode}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
       const json = await response.json();
 
       if (!response.ok || !json.success) {
@@ -344,6 +375,16 @@ export const roomService = {
         data: clientRoom,
       };
     } catch (error) {
+      // Graceful fallback to locally cached room if server is waking up or request timed out
+      const cached = this.getCurrentRoom();
+      if (cached && cached.roomCode === cleanCode) {
+        return {
+          success: true,
+          message: 'Loaded from local cache',
+          data: cached,
+        };
+      }
+
       return {
         success: false,
         message: error instanceof Error ? error.message : 'Failed to reach server.',

@@ -27,6 +27,7 @@ import { CurrentNumberBall } from './CurrentNumberBall';
 import { RecentCallsList } from './RecentCallsList';
 import { WinnerModal } from './WinnerModal';
 import { Interactive3DStage } from '../ui/Interactive3DStage';
+import { FuturisticStadium3D } from '../three/FuturisticStadium3D';
 import {
   getSocket,
   onSocketStatusChange,
@@ -663,7 +664,10 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
       : null);
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 py-6 sm:py-8 space-y-6 select-none relative">
+    <div className="w-full max-w-7xl mx-auto px-4 py-6 sm:py-8 space-y-6 select-none relative min-h-screen">
+      {/* 3D Stadium Lighting & Floating Spheres in background */}
+      <FuturisticStadium3D intensity="compact" />
+
       {/* ROOM CLOSED OVERLAY */}
       {isRoomClosed && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useParams, useNavigate, Navigate } from 'react-router-dom';
 import { ArrowLeft, Gamepad2, Info, PlusCircle, Users, DoorClosed } from 'lucide-react';
-import { roomService, mapBackendRoomToClient, BackendPublicRoom } from '../lib/roomService';
+import { roomService, mapBackendRoomToClient } from '../lib/roomService';
 import { getSocket, joinRoomSocket, getSocketStatus } from '../lib/socket';
 import { getPlayerSession, clearPlayerSession } from '../lib/session';
 import { Room, Player } from '../types';
@@ -13,6 +13,7 @@ import { DynamicGridPreview } from '../components/room/DynamicGridPreview';
 import { RoomLobbyView } from '../components/room/RoomLobbyView';
 import { ActiveGameView } from '../components/game/ActiveGameView';
 import { BingoLoader } from '../components/ui/BingoLoader';
+import { FuturisticStadium3D } from '../components/three/FuturisticStadium3D';
 
 export function GameRoomPage() {
   const { roomCode: paramCode } = useParams<{ roomCode?: string }>();
@@ -21,7 +22,14 @@ export function GameRoomPage() {
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const currentPlayerRef = useRef<Player | null>(currentPlayer);
   useEffect(() => {
+    currentPlayerRef.current = currentPlayer;
+  }, [currentPlayer]);
+
+  useEffect(() => {
+    let isMounted = true;
+
     async function loadRoom() {
       setLoading(true);
       const session = getPlayerSession(paramCode);
@@ -29,13 +37,13 @@ export function GameRoomPage() {
 
       if (!targetCode) {
         const cached = roomService.getCurrentRoom();
-        if (cached) {
+        if (cached && isMounted) {
           setCurrentRoom(cached);
           if (cached.players.length > 0) {
             setCurrentPlayer(cached.players[0]);
           }
         }
-        setLoading(false);
+        if (isMounted) setLoading(false);
         return;
       }
 
@@ -46,6 +54,8 @@ export function GameRoomPage() {
 
       try {
         const res = await roomService.getRoom(targetCode);
+        if (!isMounted) return;
+
         if (res.success && res.data) {
           setCurrentRoom(res.data);
           const matchedPlayer = session?.playerId
@@ -61,26 +71,50 @@ export function GameRoomPage() {
             navigate(`/join?code=${targetCode}`, { replace: true });
             return;
           }
+        } else {
+          // Fallback to locally cached session
+          const cached = roomService.getCurrentRoom();
+          if (cached && cached.roomCode === targetCode.toUpperCase()) {
+            setCurrentRoom(cached);
+            const matchedPlayer = session?.playerId
+              ? cached.players.find((p) => p.id === session.playerId)
+              : undefined;
+            if (matchedPlayer) setCurrentPlayer(matchedPlayer);
+          }
         }
       } catch {
-        // Fallback
+        const cached = roomService.getCurrentRoom();
+        if (cached && cached.roomCode === targetCode.toUpperCase() && isMounted) {
+          setCurrentRoom(cached);
+          const matchedPlayer = session?.playerId
+            ? cached.players.find((p) => p.id === session.playerId)
+            : undefined;
+          if (matchedPlayer) setCurrentPlayer(matchedPlayer);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
 
     loadRoom();
+
+    return () => {
+      isMounted = false;
+    };
   }, [paramCode, navigate]);
 
   // Real-time synchronization at GameRoomPage root
   useEffect(() => {
-    if (!currentRoom?.roomCode) return;
+    const roomCode = currentRoom?.roomCode;
+    if (!roomCode) return;
 
     const socket = getSocket();
-    joinRoomSocket(currentRoom.roomCode, currentPlayer?.id || '');
+    joinRoomSocket(roomCode, currentPlayerRef.current?.id || '');
 
-    const handleRoomState = (rawRoom: BackendPublicRoom) => {
-      if (rawRoom && rawRoom.roomCode === currentRoom.roomCode) {
+    const handleRoomState = (rawRoom: any) => {
+      if (rawRoom && rawRoom.roomCode === roomCode) {
         const mapped = mapBackendRoomToClient(rawRoom);
         setCurrentRoom(mapped);
       }
@@ -92,7 +126,7 @@ export function GameRoomPage() {
       } else if (data?.status === 'active' || data?.currentPlayerId) {
         setCurrentRoom((prev) => (prev ? { ...prev, status: 'playing', game: data } : null));
       } else {
-        roomService.getRoom(currentRoom.roomCode).then((res) => {
+        roomService.getRoom(roomCode).then((res) => {
           if (res.success && res.data) {
             setCurrentRoom(res.data);
           }
@@ -105,7 +139,7 @@ export function GameRoomPage() {
     };
 
     const handlePlayerKicked = (data: { kickedPlayerId?: string; message?: string }) => {
-      if (data?.kickedPlayerId === currentPlayer?.id) {
+      if (data?.kickedPlayerId === currentPlayerRef.current?.id) {
         clearPlayerSession();
         navigate('/', {
           replace: true,
@@ -125,7 +159,7 @@ export function GameRoomPage() {
       socket.off('room:closed', handleRoomClosed);
       socket.off('room:player:kicked', handlePlayerKicked);
     };
-  }, [currentRoom?.roomCode, currentPlayer?.id, navigate]);
+  }, [currentRoom?.roomCode, navigate]);
 
   // Periodic heartbeat polling as guaranteed fallback ONLY when socket drops or reconnects
   useEffect(() => {
@@ -229,8 +263,12 @@ export function GameRoomPage() {
   }
 
   return (
-    <PageTransition className="max-w-6xl mx-auto px-4 py-8 sm:py-12 w-full">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div className="relative min-h-[calc(100vh-4rem)] w-full py-8">
+      {/* 3D Stadium Atmosphere */}
+      <FuturisticStadium3D intensity="compact" />
+
+      <PageTransition className="relative z-10 max-w-6xl mx-auto px-4 w-full">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-sm text-arcade-muted hover:text-white transition-colors"
@@ -294,5 +332,6 @@ export function GameRoomPage() {
         </div>
       </div>
     </PageTransition>
+    </div>
   );
 }

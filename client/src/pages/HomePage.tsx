@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { PlusCircle, Users, Sparkles, ChevronDown, UserX } from 'lucide-react';
-import { BingoHero3D } from '../components/three/BingoHero3D';
+import { FuturisticStadium3D } from '../components/three/FuturisticStadium3D';
 import { BingoLetters } from '../components/landing/BingoLetters';
 import { GameMockBoard } from '../components/landing/GameMockBoard';
 import { FeatureGrid } from '../components/landing/FeatureGrid';
@@ -22,9 +22,9 @@ export function HomePage() {
       {/* HERO SECTION WITH IMMERSIVE 3D BINGO BALL ENVIRONMENT */}
       {/* ========================================================================= */}
       <section className="relative w-full min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-12 md:py-20 overflow-hidden">
-        {/* Full-bleed 3D Background Layer */}
+        {/* Full-bleed 3D Stadium Background Layer */}
         <div className="absolute inset-0 z-0 pointer-events-auto">
-          <BingoHero3D />
+          <FuturisticStadium3D intensity="full" />
         </div>
 
         {/* Ambient Radial Color Spotlights */}

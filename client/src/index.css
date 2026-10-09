@@ -53,10 +53,67 @@
 @layer utilities {
   /* Ambient atmospheric backgrounds */
   .bg-arcade-radial {
-    background: radial-gradient(circle at 50% 20%, rgba(124, 58, 237, 0.12) 0%, rgba(11, 11, 16, 0) 60%),
-                radial-gradient(circle at 80% 80%, rgba(217, 70, 239, 0.08) 0%, rgba(11, 11, 16, 0) 50%),
-                radial-gradient(circle at 20% 90%, rgba(245, 158, 11, 0.05) 0%, rgba(11, 11, 16, 0) 45%),
-                #0B0B10;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(124, 58, 237, 0.28) 0%, rgba(11, 11, 16, 0) 70%),
+      radial-gradient(ellipse 60% 40% at 10% 30%, rgba(6, 182, 212, 0.16) 0%, rgba(11, 11, 16, 0) 60%),
+      radial-gradient(ellipse 60% 40% at 90% 30%, rgba(217, 70, 239, 0.16) 0%, rgba(11, 11, 16, 0) 60%),
+      radial-gradient(circle at 50% 100%, rgba(59, 130, 246, 0.12) 0%, rgba(11, 11, 16, 0) 50%),
+      #080711;
+  }
+
+  /* Stadium Arena Glass Panel */
+  .stadium-glass-card {
+    background: rgba(14, 13, 27, 0.76);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(168, 85, 247, 0.24);
+    box-shadow:
+      0 20px 50px -10px rgba(0, 0, 0, 0.85),
+      0 0 1px 1px rgba(168, 85, 247, 0.35),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .stadium-glass-card-elevated {
+    background: rgba(18, 16, 36, 0.85);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(217, 70, 239, 0.35);
+    box-shadow:
+      0 25px 60px -12px rgba(0, 0, 0, 0.95),
+      0 0 30px -5px rgba(168, 85, 247, 0.3),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+  }
+
+  /* 3D Beveled Pill / Capsule Button (matching reference image) */
+  .btn-3d-capsule {
+    position: relative;
+    background: linear-gradient(180deg, #9333EA 0%, #6B21A8 50%, #4C1D95 100%);
+    box-shadow:
+      0 0 0 2px rgba(192, 132, 252, 0.6),
+      0 0 25px 3px rgba(168, 85, 247, 0.65),
+      0 8px 20px rgba(0, 0, 0, 0.6),
+      inset 0 2px 4px rgba(255, 255, 255, 0.45),
+      inset 0 -3px 6px rgba(0, 0, 0, 0.5);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-3d-capsule:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow:
+      0 0 0 2px rgba(216, 180, 254, 0.9),
+      0 0 35px 8px rgba(192, 132, 252, 0.85),
+      0 12px 28px rgba(0, 0, 0, 0.7),
+      inset 0 2px 5px rgba(255, 255, 255, 0.6),
+      inset 0 -3px 6px rgba(0, 0, 0, 0.4);
+  }
+
+  .btn-3d-capsule:active {
+    transform: translateY(1px) scale(0.99);
+    box-shadow:
+      0 0 0 2px rgba(192, 132, 252, 0.7),
+      0 0 15px 2px rgba(168, 85, 247, 0.5),
+      0 4px 10px rgba(0, 0, 0, 0.6),
+      inset 0 2px 6px rgba(0, 0, 0, 0.6);
   }
 
   /* Glass Card Architecture */
@@ -81,11 +138,19 @@
     @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-fuchsia-400 to-pink-400;
   }
 
+  .text-gradient-cyan-purple {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-cyan-300 via-indigo-300 to-purple-400;
+  }
+
   .text-gradient-gold {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-amber-500;
   }
 
   /* Glow Utilities */
+  .glow-cyan {
+    filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.6));
+  }
+
   .glow-purple {
     filter: drop-shadow(0 0 12px rgba(124, 58, 237, 0.5));
   }

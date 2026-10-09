@@ -4,7 +4,6 @@ import {
   Gamepad2,
   PlusCircle,
   Users,
-  Activity,
   Volume2,
   VolumeX,
   Menu,
@@ -56,92 +55,99 @@ export function Navbar() {
           {/* Logo & Brand Identity */}
           <Link
             to="/"
-            className="flex items-center space-x-3 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arcade-purple rounded-xl"
+            className="flex items-center space-x-3 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 rounded-xl"
             aria-label="Bingo Arena Home"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-arcade-purple to-arcade-magenta flex items-center justify-center shadow-neon-purple group-hover:scale-105 transition-transform duration-200">
-              <Gamepad2 className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 flex items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.5)] group-hover:scale-105 transition-transform duration-200">
+              <span className="text-xl">🏆</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-xl font-black tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-purple-300 via-fuchsia-300 to-amber-300 group-hover:brightness-125 transition">
+              <span className="text-lg sm:text-xl font-black tracking-wider text-white group-hover:text-cyan-300 transition">
                 BINGO ARENA
               </span>
-              <span className="text-[9px] uppercase font-bold tracking-widest text-arcade-muted -mt-0.5">
-                3D Multiplayer Arcade
+              <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-400 -mt-0.5">
+                3D MULTIPLAYER BINGO
               </span>
             </div>
           </Link>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center space-x-5" aria-label="Main Navigation">
-            {navLinks.map((link) => {
-              const Icon = link.icon;
-              const isActive = location.pathname === link.path;
-              return (
-                <Link
-                  key={link.path}
-                  to={link.path}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-150 ${
-                    isActive
-                      ? 'bg-arcade-surface text-arcade-magenta border border-arcade-purple/50 shadow-sm'
-                      : 'text-arcade-muted hover:text-white hover:bg-arcade-surface/60'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{link.label}</span>
-                </Link>
-              );
-            })}
+          <nav className="hidden md:flex items-center space-x-3" aria-label="Main Navigation">
+            {/* Create Room Pill Button */}
+            <Link
+              to="/create"
+              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 ${
+                location.pathname === '/create'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border border-purple-400/80 shadow-[0_0_20px_rgba(168,85,247,0.6)]'
+                  : 'bg-arcade-surface/90 text-slate-300 border border-arcade-border hover:border-purple-500/50 hover:text-white'
+              }`}
+            >
+              <PlusCircle className="w-4 h-4 text-purple-300" />
+              <span>Create Room</span>
+            </Link>
+
+            {/* Join Game Pill Button */}
+            <Link
+              to="/join"
+              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 ${
+                location.pathname === '/join'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border border-purple-400/80 shadow-[0_0_20px_rgba(168,85,247,0.6)]'
+                  : 'bg-arcade-surface/90 text-slate-300 border border-arcade-border hover:border-purple-500/50 hover:text-white'
+              }`}
+            >
+              <Gamepad2 className="w-4 h-4 text-cyan-400" />
+              <span>Join Game</span>
+            </Link>
+
+            {/* Arena Floor Pill Button */}
+            <Link
+              to="/game"
+              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 ${
+                location.pathname.startsWith('/game') && location.pathname !== '/create'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border border-purple-400/80 shadow-[0_0_20px_rgba(168,85,247,0.6)]'
+                  : 'bg-arcade-surface/90 text-slate-300 border border-arcade-border hover:border-purple-500/50 hover:text-white'
+              }`}
+            >
+              <Grid3X3 className="w-4 h-4 text-amber-400" />
+              <span>Arena Floor</span>
+            </Link>
 
             {/* Sound Effects Toggle */}
             <button
               onClick={handleToggleSound}
               title={soundEnabled ? 'Sound FX: ON (Click to mute)' : 'Sound FX: MUTED (Click to enable)'}
               aria-label={soundEnabled ? 'Mute sound effects' : 'Unmute sound effects'}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-arcade-surface border border-arcade-border text-arcade-muted hover:text-white hover:border-arcade-purple/40 transition"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-arcade-surface/90 border border-arcade-border text-slate-300 hover:text-white hover:border-purple-500/40 transition"
             >
               {soundEnabled ? (
                 <>
-                  <Volume2 className="w-4 h-4 text-arcade-gold" />
-                  <span className="hidden lg:inline text-[11px]">Audio: ON</span>
+                  <Volume2 className="w-4 h-4 text-cyan-400" />
+                  <span className="text-[11px] font-bold">Audio On</span>
                 </>
               ) : (
                 <>
                   <VolumeX className="w-4 h-4 text-rose-400" />
-                  <span className="hidden lg:inline text-[11px]">Audio: MUTED</span>
+                  <span className="text-[11px] font-bold">Audio Muted</span>
                 </>
               )}
             </button>
 
-            {/* Server Status Badge */}
+            {/* Server Status Pill (Online with green beacon matching reference image) */}
             <div
-              className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-arcade-card border border-arcade-border text-xs"
-              title="Backend Server Health Status"
+              className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-arcade-surface/90 border border-arcade-border text-xs"
+              title="Arena Network Status"
             >
-              <Activity className="w-3.5 h-3.5 text-arcade-muted" />
-              <span className="text-arcade-muted text-[11px]">Server:</span>
               <span
                 className={`w-2 h-2 rounded-full ${
-                  serverOnline === true
-                    ? 'bg-emerald-400 shadow-[0_0_8px_#34D399]'
-                    : serverOnline === false
-                    ? 'bg-amber-400 animate-pulse shadow-[0_0_8px_#FBBF24]'
-                    : 'bg-amber-400 animate-pulse'
+                  serverOnline === false
+                    ? 'bg-amber-400 animate-ping'
+                    : 'bg-emerald-400 shadow-[0_0_10px_#10B981]'
                 }`}
               />
-              <span
-                className={`font-bold text-[11px] ${
-                  serverOnline === true
-                    ? 'text-emerald-400'
-                    : 'text-amber-400'
-                }`}
-              >
-                {serverOnline === true
-                  ? 'ONLINE'
-                  : serverOnline === false
-                  ? 'WAKING SERVER...'
-                  : 'CONNECTING...'}
+              <span className="font-bold text-[11px] text-emerald-400">
+                {serverOnline === false ? 'Connecting' : 'Online'}
               </span>
+              <span className="text-arcade-muted text-[10px]">▾</span>
             </div>
           </nav>
 

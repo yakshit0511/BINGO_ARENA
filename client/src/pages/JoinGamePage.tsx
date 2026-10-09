@@ -1,19 +1,22 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
+  Gamepad2,
   KeyRound,
-  UserCheck,
+  User,
   AlertCircle,
   Check,
+  ArrowRight,
+  Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { validatePlayerName, validateRoomCode } from '../utils/validation';
 import { roomService } from '../lib/roomService';
+import { soundManager } from '../lib/sound';
 import { Room, Player } from '../types';
-import { Button } from '../components/ui/Button';
-import { TiltCard } from '../components/ui/TiltCard';
 import { PageTransition } from '../components/layout/PageTransition';
 import { RoomLobbyView } from '../components/room/RoomLobbyView';
+import { FuturisticStadium3D } from '../components/three/FuturisticStadium3D';
 
 export function JoinGamePage() {
   const navigate = useNavigate();
@@ -62,6 +65,7 @@ export function JoinGamePage() {
     e.preventDefault();
     if (!isFormValid || isSubmitting) return;
 
+    soundManager.playGameStart();
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -75,7 +79,9 @@ export function JoinGamePage() {
         setErrorMessage(response.message || 'Unable to join arena room.');
       }
     } catch {
-      setErrorMessage('Unable to connect to server. If Render backend is waking up, please wait a moment and retry.');
+      setErrorMessage(
+        'Unable to connect to server. If Render backend is waking up, please wait a moment and retry.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -99,51 +105,52 @@ export function JoinGamePage() {
   }
 
   return (
-    <PageTransition className="max-w-md mx-auto px-4 py-8 sm:py-16 w-full">
-      <Link
-        to="/"
-        className="inline-flex items-center gap-2 text-sm text-arcade-muted hover:text-white mb-6 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        <span>Back to Lobby</span>
-      </Link>
+    <div className="relative min-h-[calc(100vh-4rem)] w-full flex flex-col justify-center items-center py-10 px-4 sm:px-6">
+      {/* 3D Stadium Atmosphere */}
+      <FuturisticStadium3D intensity="compact" />
 
-      <TiltCard elevated glowColor="magenta" className="p-6 sm:p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-arcade-magenta/20 border border-arcade-magenta/40 flex items-center justify-center text-arcade-gold shadow-neon-magenta">
-            <KeyRound className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-white tracking-wide uppercase">
-              JOIN GAME ROOM
-            </h1>
-            <p className="text-xs text-arcade-muted">
-              Enter your room code and display name to enter the arena
-            </p>
-          </div>
-        </div>
-
-        {/* Global error banner if room join failed */}
-        {errorMessage && (
-          <div className="p-3 mb-4 rounded-xl bg-rose-500/20 border border-rose-400 text-xs text-rose-300 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleJoin} className="space-y-4">
-          {/* Room Code Input */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor="roomCode" className="text-xs font-bold uppercase tracking-wider text-arcade-muted">
-                6-Character Room Code <span className="text-rose-400">*</span>
-              </label>
-              <span className="text-[10px] font-mono text-arcade-muted">
-                {roomCode.length}/6
-              </span>
+      {/* Main Glassmorphism Card */}
+      <PageTransition className="relative z-10 w-full max-w-lg mx-auto">
+        <div className="rounded-3xl bg-[#0e0c1c]/90 border border-purple-500/30 p-6 sm:p-8 shadow-[0_25px_60px_rgba(0,0,0,0.9),0_0_25px_rgba(168,85,247,0.25)] backdrop-blur-2xl">
+          {/* Card Header */}
+          <div className="flex items-center gap-3.5 pb-5 border-b border-purple-900/40 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-[0_0_15px_rgba(168,85,247,0.6)]">
+              <Gamepad2 className="w-6 h-6 text-cyan-300" />
             </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-cyan-300 via-white to-purple-300">
+                JOIN BINGO ARENA
+              </h1>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Enter your 6-character room code & nickname
+              </p>
+            </div>
+          </div>
 
-            <div className="relative">
+          {/* Error Banner */}
+          {errorMessage && (
+            <div className="p-3 mb-5 rounded-xl bg-rose-500/20 border border-rose-400 text-xs text-rose-300 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleJoin} className="space-y-5">
+            {/* Room Code */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="roomCode"
+                  className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>ROOM CODE</span>
+                </label>
+                <span className="text-[11px] font-mono text-cyan-300 font-bold">
+                  {roomCode.length} / 6
+                </span>
+              </div>
+
               <input
                 id="roomCode"
                 type="text"
@@ -152,77 +159,93 @@ export function JoinGamePage() {
                 placeholder="e.g. B7K4P2"
                 maxLength={6}
                 autoFocus
-                className="w-full px-4 py-3.5 rounded-xl bg-arcade-bg border border-arcade-border text-white text-xl font-mono tracking-widest text-center uppercase focus:outline-none focus:border-arcade-magenta focus:ring-1 focus:ring-arcade-magenta transition"
+                className="w-full px-4 py-3.5 rounded-2xl bg-[#090714]/90 border border-purple-900/60 text-white text-2xl font-mono font-black tracking-[0.3em] text-center uppercase focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition"
               />
-            </div>
 
-            <div className="mt-1.5 text-xs">
               {roomCode.length > 0 && (
-                codeValidation.isValid ? (
-                  <p className="text-emerald-400 flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" />
-                    <span>{codeValidation.message}</span>
-                  </p>
-                ) : (
-                  <p className="text-rose-400 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>{codeValidation.message}</span>
-                  </p>
-                )
+                <div className="text-xs pt-1">
+                  {codeValidation.isValid ? (
+                    <p className="text-emerald-400 flex items-center gap-1 font-semibold">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{codeValidation.message}</span>
+                    </p>
+                  ) : (
+                    <p className="text-rose-400 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span>{codeValidation.message}</span>
+                    </p>
+                  )}
+                </div>
               )}
             </div>
-          </div>
 
-          {/* Player Nickname Input */}
-          <div>
-            <label htmlFor="playerName" className="block text-xs font-bold uppercase tracking-wider text-arcade-muted mb-1.5">
-              Player Nickname <span className="text-rose-400">*</span>
-            </label>
-            <input
-              id="playerName"
-              type="text"
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              placeholder="Enter your nickname (2-20 characters)"
-              maxLength={20}
-              className="w-full px-4 py-3 rounded-xl bg-arcade-bg border border-arcade-border text-white text-sm focus:outline-none focus:border-arcade-purple focus:ring-1 focus:ring-arcade-purple transition"
-            />
+            {/* Player Nickname */}
+            <div className="space-y-1.5">
+              <label
+                htmlFor="playerName"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5"
+              >
+                <User className="w-3.5 h-3.5 text-purple-400" />
+                <span>PLAYER NICKNAME</span>
+              </label>
 
-            <div className="mt-1.5 text-xs">
+              <input
+                id="playerName"
+                type="text"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="Enter player nickname (e.g. ArcadeHero)"
+                maxLength={20}
+                className="w-full px-4 py-3 rounded-2xl bg-[#090714]/90 border border-purple-900/60 text-white text-sm focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400 transition"
+              />
+
               {playerName.length > 0 && !nameValidation.isValid && (
-                <p className="text-rose-400 flex items-center gap-1">
+                <p className="text-xs text-rose-400 flex items-center gap-1 pt-1">
                   <AlertCircle className="w-3.5 h-3.5" />
                   <span>{nameValidation.message}</span>
                 </p>
               )}
             </div>
+
+            {/* Futuristic 3D Beveled Join Button */}
+            <div className="pt-3">
+              <button
+                type="submit"
+                disabled={!isFormValid || isSubmitting}
+                className={`btn-3d-capsule w-full py-4 rounded-full text-base font-black text-white uppercase tracking-wider flex items-center justify-center gap-2.5 cursor-pointer select-none ${
+                  !isFormValid || isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin text-white" />
+                    <span>Connecting To Arena...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5 text-amber-300" />
+                    <span>Enter Arena</span>
+                    <ArrowRight className="w-5 h-5 text-purple-200" />
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+
+          {/* Quick Nav to Create Room */}
+          <div className="mt-6 pt-4 border-t border-purple-900/40 text-center">
+            <p className="text-xs text-slate-400">
+              Want to host your own arena?{' '}
+              <Link
+                to="/create"
+                className="text-cyan-400 font-bold hover:text-cyan-300 underline underline-offset-2 ml-1"
+              >
+                Create Room ➔
+              </Link>
+            </p>
           </div>
-
-          {/* Join Button */}
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            disabled={!isFormValid || isSubmitting}
-            isLoading={isSubmitting}
-            className="w-full mt-4 font-black text-base shadow-neon-purple"
-            leftIcon={<UserCheck className="w-5 h-5 text-arcade-gold" />}
-          >
-            ENTER ARENA ROOM
-          </Button>
-        </form>
-
-        {/* Quick Join Demonstration Help */}
-        <div className="mt-6 pt-4 border-t border-arcade-border/60 text-center">
-          <p className="text-[11px] text-arcade-muted">
-            Don't have a code?{' '}
-            <Link to="/create" className="text-fuchsia-300 font-bold hover:underline">
-              Create a new room
-            </Link>{' '}
-            to get started.
-          </p>
         </div>
-      </TiltCard>
-    </PageTransition>
+      </PageTransition>
+    </div>
   );
 }

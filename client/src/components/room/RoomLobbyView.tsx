@@ -40,6 +40,7 @@ import { DynamicGridPreview } from './DynamicGridPreview';
 import { BoardSetupView } from '../board/BoardSetupView';
 import { TurnOrderConfig } from './TurnOrderConfig';
 import { ActiveGameView } from '../game/ActiveGameView';
+import { FuturisticStadium3D } from '../three/FuturisticStadium3D';
 
 interface RoomLobbyViewProps {
   room: Room;
@@ -166,11 +167,25 @@ export function RoomLobbyView({
     };
 
     // 6. Game authoritative state listener
-    const handleGameState = (rawRoom: BackendPublicRoom) => {
-      if (rawRoom && rawRoom.roomCode === room.roomCode) {
-        const clientRoom = mapBackendRoomToClient(rawRoom);
+    const handleGameState = (data: any) => {
+      if (!data) return;
+      if (data.roomCode && Array.isArray(data.players)) {
+        const clientRoom = mapBackendRoomToClient(data);
         setRoom(clientRoom);
         onRoomUpdate?.(clientRoom);
+      } else if (data.status || data.currentPlayerId || Array.isArray(data.playerOrder)) {
+        setRoom((prev) => {
+          const updated: Room = {
+            ...prev,
+            status: data.status === 'active' ? 'playing' : prev.status,
+            game: {
+              ...(prev.game || {}),
+              ...data,
+            },
+          };
+          onRoomUpdate?.(updated);
+          return updated;
+        });
       }
     };
 
@@ -330,78 +345,48 @@ export function RoomLobbyView({
     setIsStarting(true);
     setStartError(null);
     const orderToSend = getEffectiveTurnOrder();
+
     try {
       // 1. Attempt via Socket.IO
       const res = await startGameSocket(room.roomCode, currentPlayer.id, orderToSend);
-
-      // 2. If socket was not acknowledged or failed, fallback to REST API
-      if (!res.success) {
-        console.warn('Socket startGame not acknowledged, trying REST API...', res.message);
-        const restRes = await roomService.startGame(
-          room.roomCode,
-          currentPlayer.id,
-          orderToSend
-        );
-        if (restRes.success && restRes.data) {
-          setRoom(restRes.data.room);
-          onRoomUpdate?.(restRes.data.room);
-          return;
-        } else if (restRes.message?.includes('already started') || res.message?.includes('already started')) {
-          const fresh = await roomService.getRoom(room.roomCode);
-          if (fresh.success && fresh.data) {
-            setRoom(fresh.data);
-            onRoomUpdate?.(fresh.data);
-            return;
-          }
-        } else {
-          setStartError(restRes.message || res.message || 'Failed to start game.');
+      if (res && res.success) {
+        setIsStarting(false);
+        if (res.room) {
+          const mapped = mapBackendRoomToClient(res.room as BackendPublicRoom);
+          setRoom(mapped);
+          onRoomUpdate?.(mapped);
           return;
         }
       }
 
-      if (res.success && res.room) {
-        const mapped = mapBackendRoomToClient(res.room as BackendPublicRoom);
-        setRoom(mapped);
-        onRoomUpdate?.(mapped);
-      } else if (res.success) {
+      // 2. If socket timed out or was not acknowledged, fallback to REST API
+      console.warn('Socket startGame not acknowledged, trying REST API...', res?.message);
+      const restRes = await roomService.startGame(
+        room.roomCode,
+        currentPlayer.id,
+        orderToSend
+      );
+
+      setIsStarting(false);
+      if (restRes.success && restRes.data) {
+        setRoom(restRes.data.room);
+        onRoomUpdate?.(restRes.data.room);
+        return;
+      } else if (restRes.message?.includes('already started') || res?.message?.includes('already started')) {
         const fresh = await roomService.getRoom(room.roomCode);
         if (fresh.success && fresh.data) {
           setRoom(fresh.data);
           onRoomUpdate?.(fresh.data);
+          return;
         }
+      } else {
+        setStartError(restRes.message || res?.message || 'Failed to start game.');
+        return;
       }
     } catch (err: unknown) {
-      // Fallback on error
-      try {
-        const restRes = await roomService.startGame(
-          room.roomCode,
-          currentPlayer.id,
-          orderToSend
-        );
-        if (restRes.success && restRes.data) {
-          setRoom(restRes.data.room);
-          onRoomUpdate?.(restRes.data.room);
-          return;
-        }
-        if (restRes.message?.includes('already started')) {
-          const fresh = await roomService.getRoom(room.roomCode);
-          if (fresh.success && fresh.data) {
-            setRoom(fresh.data);
-            onRoomUpdate?.(fresh.data);
-            return;
-          }
-        }
-        setStartError(restRes.message || 'Failed to start game.');
-      } catch {
-        const fresh = await roomService.getRoom(room.roomCode);
-        if (fresh.success && fresh.data && fresh.data.status === 'playing') {
-          setRoom(fresh.data);
-          onRoomUpdate?.(fresh.data);
-          return;
-        }
-        const msg = err instanceof Error ? err.message : 'Error starting game';
-        setStartError(msg);
-      }
+      setIsStarting(false);
+      const msg = err instanceof Error ? err.message : 'Error starting game';
+      setStartError(msg);
     } finally {
       setIsStarting(false);
     }
@@ -556,8 +541,12 @@ export function RoomLobbyView({
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-6">
-      {/* Top Bar with Leave Button & Title */}
+    <div className="relative min-h-[calc(100vh-4rem)] w-full py-8">
+      {/* 3D Stadium Lighting & Floating Spheres */}
+      <FuturisticStadium3D intensity="compact" />
+
+      <div className="relative z-10 w-full max-w-6xl mx-auto px-4 space-y-6">
+        {/* Top Bar with Leave Button & Title */}
       <div className="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-arcade-border/80">
         <button
           onClick={() => setShowLeaveConfirm(true)}
@@ -870,6 +859,7 @@ export function RoomLobbyView({
           </div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 }
