@@ -181,7 +181,7 @@ const RoomSchema = new Schema<IRoomDocument>(
       type: Number,
       required: true,
       min: 5,
-      max: 20,
+      max: 12,
     },
     playerLimit: {
       type: Number,

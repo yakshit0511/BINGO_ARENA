@@ -37,10 +37,10 @@ export function validateCreateRoomInput(
     return { isValid: false, error: 'Host name must be between 2 and 20 characters.' };
   }
 
-  // Grid Size (5 to 20)
+  // Grid Size (5 to 12)
   const rawGridSize = Number(body.gridSize);
-  if (!Number.isInteger(rawGridSize) || rawGridSize < 5 || rawGridSize > 20) {
-    return { isValid: false, error: 'Grid size must be an integer between 5 and 20.' };
+  if (!Number.isInteger(rawGridSize) || rawGridSize < 5 || rawGridSize > 12) {
+    return { isValid: false, error: 'Grid size must be an integer between 5 and 12.' };
   }
   const gridSize = rawGridSize;
 

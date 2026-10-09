@@ -13,7 +13,7 @@ export type CallingMode = 'random' | 'turn-based';
 export type MarkingMode = 'auto' | 'manual';
 
 export interface GameConfig {
-  gridSize: number; // N (e.g. 5 to 20)
+  gridSize: number; // N (e.g. 5 to 12)
   playerLimit: number; // 5 to 30
   winningWord: string; // Exactly N letters, uppercase alphabetic
   callingMode: CallingMode;

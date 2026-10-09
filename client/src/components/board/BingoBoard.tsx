@@ -80,7 +80,7 @@ export function BingoBoard({
     if (gridSize <= 10) {
       return 'w-5 h-5 sm:w-8 sm:h-8 min-w-[1.15rem] sm:min-w-[2rem] min-h-[1.15rem] sm:min-h-[2rem] text-[8px] sm:text-xs';
     }
-    // Very large grids (11-20)
+    // Extended grids (11-12)
     return 'w-4 h-4 sm:w-7 sm:h-7 min-w-[1rem] sm:min-w-[1.75rem] min-h-[1rem] sm:min-h-[1.75rem] text-[7px] sm:text-[10px]';
   };
 

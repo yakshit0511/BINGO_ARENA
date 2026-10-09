@@ -9,22 +9,21 @@ interface GridSizeSelectorProps {
 }
 
 export function GridSizeSelector({ value, onChange }: GridSizeSelectorProps) {
-  const [filterTab, setFilterTab] = useState<'all' | 'classic' | 'pro' | 'mega'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'classic' | 'pro'>('all');
 
   const filteredSizes = SUPPORTED_GRID_SIZES.filter((size) => {
     if (filterTab === 'classic') return size >= 5 && size <= 8;
-    if (filterTab === 'pro') return size >= 9 && size <= 14;
-    if (filterTab === 'mega') return size >= 15 && size <= 20;
+    if (filterTab === 'pro') return size >= 9 && size <= 12;
     return true;
   });
 
   return (
-    <div className="space-y-4">
-      {/* Category Filter Pills for rapid navigation on mobile/desktop */}
+    <div className="space-y-3.5">
+      {/* Category Filter Pills for rapid navigation */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <label className="text-xs font-bold uppercase tracking-wider text-arcade-muted flex items-center gap-1.5">
           <Grid3X3 className="w-3.5 h-3.5 text-arcade-purple" />
-          <span>Select Matrix Dimensions (5×5 to 20×20)</span>
+          <span>Select Matrix Dimensions (5×5 to 12×12)</span>
         </label>
 
         <div className="inline-flex rounded-lg bg-arcade-bg/80 p-0.5 border border-arcade-border text-[11px] font-semibold">
@@ -37,7 +36,7 @@ export function GridSizeSelector({ value, onChange }: GridSizeSelectorProps) {
                 : 'text-arcade-muted hover:text-white'
             }`}
           >
-            All (5–20)
+            All (5–12)
           </button>
           <button
             type="button"
@@ -59,24 +58,13 @@ export function GridSizeSelector({ value, onChange }: GridSizeSelectorProps) {
                 : 'text-arcade-muted hover:text-white'
             }`}
           >
-            Pro (9–14)
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterTab('mega')}
-            className={`px-2.5 py-1 rounded-md transition ${
-              filterTab === 'mega'
-                ? 'bg-arcade-surface text-white shadow-sm'
-                : 'text-arcade-muted hover:text-white'
-            }`}
-          >
-            Mega (15–20)
+            Pro (9–12)
           </button>
         </div>
       </div>
 
       {/* Grid of Size Selectors */}
-      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2 max-h-56 overflow-y-auto pr-1">
+      <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-8 gap-2">
         {filteredSizes.map((size) => {
           const isSelected = value === size;
           const totalNumbers = size * size;

@@ -3,9 +3,9 @@ import { CallingMode } from '../types';
 export const APP_NAME = 'Bingo Arena';
 export const APP_TAGLINE = 'Create. Play. Call. Complete.';
 
-// Grid sizes 5x5 up to 20x20
+// Supported Grid sizes 5x5 up to 12x12
 export const SUPPORTED_GRID_SIZES = [
-  5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+  5, 6, 7, 8, 9, 10, 11, 12,
 ] as const;
 
 export const PLAYER_LIMIT_OPTIONS = [5, 10, 15, 20, 25, 30] as const;
@@ -29,7 +29,7 @@ export const CALLING_MODES: {
   },
 ];
 
-// Helpful word inspirations by grid length
+// Helpful word inspirations by grid length (5 to 12)
 export const WORD_SUGGESTIONS_BY_SIZE: Record<number, string[]> = {
   5: ['BINGO', 'ARENA', 'CHAMP', 'LUCKY', 'TITAN'],
   6: ['ARCADE', 'VICTOR', 'MASTER', 'LEGEND', 'STRIKE'],
@@ -39,14 +39,6 @@ export const WORD_SUGGESTIONS_BY_SIZE: Record<number, string[]> = {
   10: ['INVINCIBLE', 'MASTERMIND', 'CENTURIONS', 'LEADERSHIP', 'LEGENDARYS'],
   11: ['BLOCKBUSTER', 'THUNDERBOLT', 'CHAMPIONSHIP', 'UNSTOPPABLE'],
   12: ['GRANDMASTERS', 'UNCONQUERABLE', 'SUPERIORITY'],
-  13: ['UNQUESTIONABLE', 'EXTRAORDINARY'],
-  14: ['INDOMITABILITY', 'INCOMPREHENSIBL'],
-  15: ['UNCONQUERABLENES', 'CHARACTERIZATION'],
-  16: ['INCONSEQUENTIALITY'],
-  17: ['ELECTROENCEPHALOGRAPHY'],
-  18: ['ELECTROCARDIOGRAMS'],
-  19: ['UNCHARACTERISTICALLY'],
-  20: ['ELECTROENCEPHALOGRAMS'],
 };
 
 function resolveApiUrl(): string {
