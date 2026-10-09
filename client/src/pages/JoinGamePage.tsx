@@ -31,7 +31,7 @@ export function JoinGamePage() {
 
   // Pre-fill room code from URL query param if present (e.g. /join?code=B7K4P2)
   useEffect(() => {
-    const codeParam = searchParams.get('code');
+    const codeParam = searchParams.get('code') || searchParams.get('room');
     if (codeParam) {
       setRoomCode(codeParam.trim().toUpperCase());
     }

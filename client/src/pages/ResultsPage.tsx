@@ -18,6 +18,8 @@ import { getPlayerSession, clearPlayerSession } from '../lib/session';
 import { Room, GameState, RoundRecord } from '../types';
 import { PageTransition } from '../components/layout/PageTransition';
 import { TiltCard } from '../components/ui/TiltCard';
+import { Interactive3DStage } from '../components/ui/Interactive3DStage';
+import { CelebrationFx } from '../components/game/CelebrationFx';
 import { soundManager } from '../lib/sound';
 import { continueGameSocket, restartGameSocket, closeRoomSocket, getSocket } from '../lib/socket';
 
@@ -246,83 +248,88 @@ export function ResultsPage() {
         </div>
       )}
 
-      {/* HERO PODIUM / RESULT CARD */}
-      <TiltCard elevated glowColor="gold" className="p-6 sm:p-8 text-center space-y-6">
-        {isWon ? (
-          <>
-            <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-3xl bg-gradient-to-tr from-amber-500/20 via-yellow-400/20 to-purple-600/30 border-2 border-arcade-gold p-1 shadow-[0_0_35px_rgba(251,191,36,0.5)] flex items-center justify-center">
-              <Trophy className="w-10 h-10 sm:w-12 sm:h-12 text-arcade-gold animate-bounce" />
-            </div>
+      {/* REAL-TIME CELEBRATION FX (Fireworks, Sparks, Crackers, Burning Flares & 3D Falling Flower Petals) */}
+      <CelebrationFx active={isWon} />
 
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-arcade-magenta border border-fuchsia-300 shadow-neon-magenta text-[10px] font-black uppercase tracking-wider text-white">
-                <Crown className="w-3.5 h-3.5 text-amber-300" />
-                <span>CHAMPION CONCLUDED</span>
+      {/* HERO PODIUM / RESULT CARD WITH 3D INTERACTIVE TILT */}
+      <Interactive3DStage maxTiltX={6} maxTiltY={8} depth={25}>
+        <TiltCard elevated glowColor="gold" className="p-6 sm:p-8 text-center space-y-6">
+          {isWon ? (
+            <>
+              <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-3xl bg-gradient-to-tr from-amber-500/20 via-yellow-400/20 to-purple-600/30 border-2 border-arcade-gold p-1 shadow-[0_0_35px_rgba(251,191,36,0.5)] flex items-center justify-center">
+                <Trophy className="w-10 h-10 sm:w-12 sm:h-12 text-arcade-gold animate-bounce" />
               </div>
-              <h1 className="text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-arcade-gold to-yellow-400 tracking-wide uppercase">
-                {game?.winnerName || 'Winner'}
-              </h1>
-              <p className="text-xs sm:text-sm text-arcade-muted">
-                Completed the target word target first!
-              </p>
-            </div>
 
-            {/* Winning Word Letters */}
-            <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap py-2">
-              {targetLetters.map((l, idx) => (
-                <div
-                  key={idx}
-                  className="w-11 h-12 sm:w-12 sm:h-14 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 border-2 border-yellow-200 text-slate-950 font-mono font-black text-xl sm:text-2xl shadow-[0_0_15px_rgba(251,191,36,0.6)] flex items-center justify-center"
-                >
-                  {l}
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-arcade-magenta border border-fuchsia-300 shadow-neon-magenta text-[10px] font-black uppercase tracking-wider text-white">
+                  <Crown className="w-3.5 h-3.5 text-amber-300" />
+                  <span>CHAMPION CONCLUDED</span>
                 </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="w-18 h-18 sm:w-20 sm:h-20 mx-auto rounded-3xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400">
-              <AlertTriangle className="w-10 h-10 text-amber-400" />
+                <h1 className="text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-arcade-gold to-yellow-400 tracking-wide uppercase">
+                  {game?.winnerName || 'Winner'}
+                </h1>
+                <p className="text-xs sm:text-sm text-arcade-muted">
+                  Completed the target word target first!
+                </p>
+              </div>
+
+              {/* Winning Word Letters */}
+              <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap py-2">
+                {targetLetters.map((l, idx) => (
+                  <div
+                    key={idx}
+                    className="w-11 h-12 sm:w-12 sm:h-14 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 border-2 border-yellow-200 text-slate-950 font-mono font-black text-xl sm:text-2xl shadow-[0_0_15px_rgba(251,191,36,0.6)] flex items-center justify-center"
+                  >
+                    {l}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-18 h-18 sm:w-20 sm:h-20 mx-auto rounded-3xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400">
+                <AlertTriangle className="w-10 h-10 text-amber-400" />
+              </div>
+
+              <div className="space-y-1">
+                <h1 className="text-2xl sm:text-3xl font-black text-slate-200 tracking-wide uppercase">
+                  NO WINNER
+                </h1>
+                <p className="text-xs sm:text-sm text-arcade-muted max-w-md mx-auto">
+                  All {maxNumbers} numbers have been called. No player completed the winning word "{winningWord}".
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* Core Match Statistics Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto pt-2">
+            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Winning Word</span>
+              <div className="text-sm font-mono font-black text-arcade-gold mt-1">{winningWord}</div>
             </div>
 
-            <div className="space-y-1">
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-200 tracking-wide uppercase">
-                NO WINNER
-              </h1>
-              <p className="text-xs sm:text-sm text-arcade-muted max-w-md mx-auto">
-                All {maxNumbers} numbers have been called. No player completed the winning word "{winningWord}".
-              </p>
+            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Winning Call</span>
+              <div className="text-sm font-mono font-black text-white mt-1">
+                {game?.winningNumber ? `#${game.winningNumber}` : '—'}
+              </div>
             </div>
-          </>
-        )}
 
-        {/* Core Match Statistics Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto pt-2">
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Winning Word</span>
-            <div className="text-sm font-mono font-black text-arcade-gold mt-1">{winningWord}</div>
+            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Numbers Called</span>
+              <div className="text-sm font-mono font-black text-white mt-1">
+                {totalCalls} / {maxNumbers}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Game Duration</span>
+              <div className="text-sm font-mono font-black text-emerald-400 mt-1">{durationStr}</div>
+            </div>
           </div>
-
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Winning Call</span>
-            <div className="text-sm font-mono font-black text-white mt-1">
-              {game?.winningNumber ? `#${game.winningNumber}` : '—'}
-            </div>
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Numbers Called</span>
-            <div className="text-sm font-mono font-black text-white mt-1">
-              {totalCalls} / {maxNumbers}
-            </div>
-          </div>
-
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Game Duration</span>
-            <div className="text-sm font-mono font-black text-emerald-400 mt-1">{durationStr}</div>
-          </div>
-        </div>
-      </TiltCard>
+        </TiltCard>
+      </Interactive3DStage>
 
       {/* PLAYER RESULTS (Section 27) */}
       <div className="space-y-3">

@@ -93,6 +93,10 @@ export function validateCreateRoomInput(
   const hostParticipates =
     typeof body.hostParticipates === 'boolean' ? body.hostParticipates : true;
 
+  // Marking Mode ('auto' | 'manual', default 'auto')
+  const rawMarkingMode = String(body.markingMode || '').toLowerCase();
+  const markingMode = rawMarkingMode === 'manual' ? ('manual' as const) : ('auto' as const);
+
   return {
     isValid: true,
     data: {
@@ -101,6 +105,7 @@ export function validateCreateRoomInput(
       winningWord: cleanWord,
       callingMode,
       hostParticipates,
+      markingMode,
       hostName,
     },
   };

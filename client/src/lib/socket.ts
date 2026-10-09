@@ -93,11 +93,11 @@ export function getSocket(): Socket {
     socketInstance = io(SERVER_URL, {
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 30,
-      reconnectionDelay: 500,
-      reconnectionDelayMax: 3000,
+      reconnectionAttempts: 40,
+      reconnectionDelay: 300,
+      reconnectionDelayMax: 2000,
       timeout: 15000,
-      transports: ['polling', 'websocket'],
+      transports: ['websocket', 'polling'],
       withCredentials: false,
     });
 
@@ -177,7 +177,7 @@ export function joinRoomSocket(
     playerId: cleanPlayerId,
   };
 
-  return emitWithTimeout(socket, 'room:join', payload, 1800, 'Join room socket timed out.');
+  return emitWithTimeout(socket, 'room:join', payload, 5000, 'Join room socket timed out.');
 }
 
 /**

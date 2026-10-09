@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { WinnerInfo, Player, PlayerRanking } from '../../types';
 import { BingoBall3D } from '../three/BingoBall3D';
+import { CelebrationFx } from './CelebrationFx';
+import { Interactive3DStage } from '../ui/Interactive3DStage';
 
 interface WinnerModalProps {
   status: 'won' | 'no_winner';
@@ -95,6 +97,9 @@ export function WinnerModal({
       {/* Outer ambient celebratory aura - Gold / Magenta / Purple */}
       <div className="absolute w-[500px] h-[500px] bg-gradient-to-tr from-arcade-purple/30 via-arcade-magenta/30 to-amber-500/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
 
+      {/* High-Performance 60FPS Celebration FX (Fireworks, Sparks, Flares & Flower Petals) */}
+      <CelebrationFx active={isWon} />
+
       {/* Floating Celebration Confetti Particles */}
       {isWon && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
@@ -122,13 +127,14 @@ export function WinnerModal({
         </div>
       )}
 
-      {/* Modal Container */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.88, y: 24 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ type: 'spring', damping: 25, stiffness: 280 }}
-        className="relative z-10 w-full max-w-lg rounded-3xl bg-gradient-to-b from-arcade-card via-slate-950 to-arcade-bg border-2 border-arcade-gold/80 p-5 sm:p-7 shadow-[0_0_50px_rgba(245,158,11,0.35)] text-center space-y-5 overflow-hidden my-auto"
-      >
+      {/* Modal Container with 3D Perspective */}
+      <Interactive3DStage maxTiltX={4} maxTiltY={6} depth={15} className="max-w-lg my-auto">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.88, y: 24 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 280 }}
+          className="relative z-10 w-full max-w-lg rounded-3xl bg-gradient-to-b from-arcade-card via-slate-950 to-arcade-bg border-2 border-arcade-gold/80 p-5 sm:p-7 shadow-[0_0_50px_rgba(245,158,11,0.35)] text-center space-y-5 overflow-hidden my-auto"
+        >
         {/* Round Badge Indicator */}
         <div className="flex items-center justify-between">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-arcade-surface/90 border border-arcade-border text-[11px] font-black uppercase tracking-wider text-arcade-gold">
@@ -393,6 +399,7 @@ export function WinnerModal({
           )}
         </div>
       </motion.div>
+    </Interactive3DStage>
 
       {/* Confirmation Modal for Destructive Actions (No browser alert) */}
       <AnimatePresence>

@@ -501,9 +501,17 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
         const roomCode = String(payload.roomCode || socket.data?.roomCode || '')
           .trim()
           .toUpperCase();
-        // Server authoritative: prioritize authenticated socket session
+        // Server authoritative: prioritize explicit payload ID over stale socket session
         const requestingPlayerId =
-          socket.data?.playerId || (payload.playerId ? String(payload.playerId).trim() : '');
+          (payload.playerId ? String(payload.playerId).trim() : '') ||
+          (socket.data?.playerId ? String(socket.data.playerId).trim() : '');
+
+        if (requestingPlayerId) {
+          socket.data.playerId = requestingPlayerId;
+        }
+        if (roomCode) {
+          socket.data.roomCode = roomCode;
+        }
 
         if (!roomCode || !requestingPlayerId) {
           socket.emit('game:error', { message: 'Identification failed. Please rejoin room.' });
@@ -516,6 +524,19 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
         const result = await roomService.callNumber(roomCode, requestingPlayerId, payload.number);
 
         if (!result.success || !result.data) {
+          // If the number was already called, do NOT broadcast a disruptive error
+          if (result.message?.includes('already been called')) {
+            const roomRes = await roomService.getRoom(roomCode);
+            if (roomRes.success && roomRes.data) {
+              socket.emit('room:state', roomRes.data);
+              socket.emit('game:state', roomRes.data.game);
+            }
+            if (typeof callback === 'function') {
+              callback({ success: true, message: result.message, room: roomRes.data });
+            }
+            return;
+          }
+
           socket.emit('game:error', { message: result.message });
           if (typeof callback === 'function') {
             callback({ success: false, message: result.message });

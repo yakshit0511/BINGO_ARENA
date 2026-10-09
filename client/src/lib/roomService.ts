@@ -192,6 +192,7 @@ export const roomService = {
           winningWord: config.winningWord,
           callingMode: config.callingMode,
           hostParticipates: config.hostParticipates,
+          markingMode: config.markingMode || 'auto',
           hostName: hostName.trim(),
         }),
       });

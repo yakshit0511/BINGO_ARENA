@@ -9,6 +9,7 @@ interface NumberCallerGridProps {
   currentCallerName: string;
   isProcessing: boolean;
   processingNumber: number | null;
+  lockedNumbers?: Set<number>;
   onCallNumber: (num: number) => void;
   isGameOver?: boolean;
   gameOverMessage?: string;
@@ -22,6 +23,7 @@ export function NumberCallerGrid({
   currentCallerName,
   isProcessing,
   processingNumber,
+  lockedNumbers,
   onCallNumber,
   isGameOver = false,
   gameOverMessage = 'Match concluded',
@@ -30,7 +32,13 @@ export function NumberCallerGrid({
   const totalNumbers = gridSize * gridSize;
 
   // Pre-calculate called numbers set for O(1) checks
-  const calledSet = useMemo(() => new Set(calledNumbers || []), [calledNumbers]);
+  const calledSet = useMemo(() => {
+    const set = new Set(calledNumbers || []);
+    if (lockedNumbers) {
+      lockedNumbers.forEach((n) => set.add(n));
+    }
+    return set;
+  }, [calledNumbers, lockedNumbers]);
 
   // Generate dynamic 1..N^2 numbers array
   const numbers = useMemo(() => {

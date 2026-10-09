@@ -18,6 +18,9 @@ export const initSocketServer = (httpServer: HttpServer): Server => {
       origin: '*',
       methods: ['GET', 'POST'],
     },
+    transports: ['websocket', 'polling'],
+    pingInterval: 10000,
+    pingTimeout: 15000,
   });
 
   ioInstance = io;

@@ -25,6 +25,7 @@ import { NumberCallerGrid } from './NumberCallerGrid';
 import { CurrentNumberBall } from './CurrentNumberBall';
 import { RecentCallsList } from './RecentCallsList';
 import { WinnerModal } from './WinnerModal';
+import { Interactive3DStage } from '../ui/Interactive3DStage';
 import {
   getSocket,
   onSocketStatusChange,
@@ -86,9 +87,13 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
   const isManualMode = room.config?.markingMode === 'manual';
   const [manuallyMarked, setManuallyMarked] = useState<number[]>([]);
 
+  // Immediate client-side locked numbers to prevent double calls & instant disabling
+  const [locallyLockedNumbers, setLocallyLockedNumbers] = useState<Set<number>>(new Set());
+
   // Clear manual markings when a new round or rematch starts
   useEffect(() => {
     setManuallyMarked([]);
+    setLocallyLockedNumbers(new Set());
   }, [room.game?.roundNumber]);
 
   // Compute completed lines locally in manual mode
@@ -333,7 +338,9 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
 
     const handleGameError = (data: { message?: string }) => {
       if (data?.message) {
-        setCallError(data.message);
+        if (!data.message.includes('already been called')) {
+          setCallError(data.message);
+        }
       }
       setIsCallingNumber(false);
       setCallingNumberVal(null);
@@ -402,13 +409,15 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
   // Handler for caller selecting a number from the grid
   const handleCallNumber = async (num: number) => {
     if (isGameOver || !isMyTurn || isCallingNumber) return;
+    if (locallyLockedNumbers.has(num)) return;
 
     setIsCallingNumber(true);
     setCallingNumberVal(num);
     setCallError(null);
 
-    // INSTANT OPTIMISTIC UI: Audio chime + immediate visual mark
+    // INSTANT OPTIMISTIC UI: Audio chime + immediate visual mark + immediate lock
     soundManager.playNumberCall();
+    setLocallyLockedNumbers((prev) => new Set(prev).add(num));
 
     const prevRoom = room;
     const currentCalled = room.game?.calledNumbers || [];
@@ -440,6 +449,16 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
       // 1. Attempt via Socket.IO
       let res = await callNumberSocket(room.roomCode, currentPlayer.id, num);
 
+      // If already called on the server, treat as success & sync latest room
+      if (res.message?.includes('already been called')) {
+        const fresh = await roomService.getRoom(room.roomCode);
+        if (fresh.success && fresh.data) {
+          setRoom(fresh.data);
+          onRoomUpdate?.(fresh.data);
+          return;
+        }
+      }
+
       // 2. If Socket timed out or failed, fallback to REST API
       if (!res.success) {
         const restRes = await roomService.callNumber(room.roomCode, currentPlayer.id, num);
@@ -460,6 +479,11 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
             }
           }
           // Rollback optimistic update on error
+          setLocallyLockedNumbers((prev) => {
+            const next = new Set(prev);
+            next.delete(num);
+            return next;
+          });
           setRoom(prevRoom);
           onRoomUpdate?.(prevRoom);
           setCallError(restRes.message || res.message || 'Failed to call number.');
@@ -473,6 +497,11 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
         onRoomUpdate?.(clientRoom);
       }
     } catch (err: unknown) {
+      setLocallyLockedNumbers((prev) => {
+        const next = new Set(prev);
+        next.delete(num);
+        return next;
+      });
       setRoom(prevRoom);
       onRoomUpdate?.(prevRoom);
       const msg = err instanceof Error ? err.message : 'Network error calling number';
@@ -817,111 +846,113 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
       )}
     </AnimatePresence>
 
-      {/* 1. COMPACT COMMAND HUD (Turn Status, Compact Current Number Box, Winning Target) */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch">
-        {/* CURRENT TURN CARD (Compact) */}
-        <motion.div
-          layout
-          className={`md:col-span-4 rounded-2xl p-3 sm:p-3.5 border transition-all flex items-center justify-between gap-3 overflow-hidden ${
-            isGameOver
-              ? 'bg-arcade-card/90 border-arcade-border'
-              : isMyTurn
-              ? 'bg-gradient-to-r from-arcade-magenta/20 via-arcade-card to-arcade-surface border-arcade-magenta shadow-[0_0_20px_rgba(217,70,239,0.3)]'
-              : 'bg-arcade-card/80 border-arcade-purple/40 shadow-sm'
-          }`}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-arcade-gold">
-              <Sparkles className="w-3 h-3" />
-              <span>{isGameOver ? 'MATCH OVER' : `TURN #${game?.turnNumber ?? 1}`}</span>
+      {/* 1. COMPACT COMMAND HUD (Turn Status, Compact Current Number Box, Winning Target) WITH 3D PERSPECTIVE */}
+      <Interactive3DStage maxTiltX={2.5} maxTiltY={4} depth={12}>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch">
+          {/* CURRENT TURN CARD (Compact) */}
+          <motion.div
+            layout
+            className={`md:col-span-4 rounded-2xl p-3 sm:p-3.5 border transition-all flex items-center justify-between gap-3 overflow-hidden ${
+              isGameOver
+                ? 'bg-arcade-card/90 border-arcade-border'
+                : isMyTurn
+                ? 'bg-gradient-to-r from-arcade-magenta/20 via-arcade-card to-arcade-surface border-arcade-magenta shadow-[0_0_20px_rgba(217,70,239,0.3)]'
+                : 'bg-arcade-card/80 border-arcade-purple/40 shadow-sm'
+            }`}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-arcade-gold">
+                <Sparkles className="w-3 h-3" />
+                <span>{isGameOver ? 'MATCH OVER' : `TURN #${game?.turnNumber ?? 1}`}</span>
+              </div>
+              <div className="text-sm sm:text-base font-black text-white tracking-wide truncate mt-0.5">
+                {isWon ? (
+                  <span className="text-amber-300 truncate">{game.winnerName} WON!</span>
+                ) : isGameOver ? (
+                  <span>GAME OVER</span>
+                ) : isMyTurn ? (
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-arcade-magenta via-fuchsia-300 to-amber-300 font-extrabold">
+                    YOUR TURN
+                  </span>
+                ) : (
+                  <span className="truncate">{currentTurnPlayer?.name || 'Contender'}&apos;s Turn</span>
+                )}
+              </div>
+              <p className="text-[10px] text-arcade-muted truncate">
+                {isGameOver
+                  ? 'Match completed'
+                  : isMyTurn
+                  ? 'Select a number on the right'
+                  : `Next: ${nextPlayer?.name || 'Next'}`}
+              </p>
             </div>
-            <div className="text-sm sm:text-base font-black text-white tracking-wide truncate mt-0.5">
-              {isWon ? (
-                <span className="text-amber-300 truncate">{game.winnerName} WON!</span>
-              ) : isGameOver ? (
-                <span>GAME OVER</span>
+
+            <div className="shrink-0">
+              {isGameOver ? (
+                <span className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 block">
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                </span>
               ) : isMyTurn ? (
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-arcade-magenta via-fuchsia-300 to-amber-300 font-extrabold">
-                  YOUR TURN
+                <span className="px-2.5 py-1 rounded-xl bg-arcade-magenta/30 border border-arcade-magenta text-fuchsia-200 text-[10px] font-black tracking-wider block animate-pulse">
+                  YOU CALL
                 </span>
               ) : (
-                <span className="truncate">{currentTurnPlayer?.name || 'Contender'}&apos;s Turn</span>
+                <span className="p-2 rounded-xl bg-arcade-bg/80 border border-arcade-border text-arcade-muted block">
+                  <Clock className="w-4 h-4 text-amber-400 animate-spin" />
+                </span>
               )}
             </div>
-            <p className="text-[10px] text-arcade-muted truncate">
-              {isGameOver
-                ? 'Match completed'
-                : isMyTurn
-                ? 'Select a number on the right'
-                : `Next: ${nextPlayer?.name || 'Next'}`}
-            </p>
+          </motion.div>
+
+          {/* COMPACT CURRENT NUMBER BOX */}
+          <div className="md:col-span-4">
+            <CurrentNumberBall
+              currentNumber={currentNumber}
+              callerName={currentCallerName}
+              turnNumber={game?.turnNumber ?? 1}
+              compact={true}
+              className="h-full"
+            />
           </div>
 
-          <div className="shrink-0">
-            {isGameOver ? (
-              <span className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 block">
-                <Trophy className="w-4 h-4 text-amber-400" />
+          {/* WINNING PROGRESS TARGET (B I N G O) */}
+          <div className="md:col-span-4 rounded-2xl bg-arcade-card/80 border border-arcade-border/80 p-2.5 sm:p-3 flex items-center justify-between gap-3 shadow-sm">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-arcade-gold">
+                <Trophy className="w-3 h-3 text-arcade-gold shrink-0" />
+                <span>TARGET ({winningWord})</span>
+              </div>
+              <div className="text-[11px] font-mono font-bold text-slate-300 mt-0.5">
+                <strong className="text-arcade-gold">{effectiveCompletedLetters}</strong> / {winningWord.length} Letters
+              </div>
+              <span className="text-[10px] text-arcade-muted block">
+                {effectiveCompletedLines.length} line(s) done
               </span>
-            ) : isMyTurn ? (
-              <span className="px-2.5 py-1 rounded-xl bg-arcade-magenta/30 border border-arcade-magenta text-fuchsia-200 text-[10px] font-black tracking-wider block animate-pulse">
-                YOU CALL
-              </span>
-            ) : (
-              <span className="p-2 rounded-xl bg-arcade-bg/80 border border-arcade-border text-arcade-muted block">
-                <Clock className="w-4 h-4 text-amber-400 animate-spin" />
-              </span>
-            )}
-          </div>
-        </motion.div>
-
-        {/* COMPACT CURRENT NUMBER BOX */}
-        <div className="md:col-span-4">
-          <CurrentNumberBall
-            currentNumber={currentNumber}
-            callerName={currentCallerName}
-            turnNumber={game?.turnNumber ?? 1}
-            compact={true}
-            className="h-full"
-          />
-        </div>
-
-        {/* WINNING PROGRESS TARGET (B I N G O) */}
-        <div className="md:col-span-4 rounded-2xl bg-arcade-card/80 border border-arcade-border/80 p-2.5 sm:p-3 flex items-center justify-between gap-3 shadow-sm">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-arcade-gold">
-              <Trophy className="w-3 h-3 text-arcade-gold shrink-0" />
-              <span>TARGET ({winningWord})</span>
             </div>
-            <div className="text-[11px] font-mono font-bold text-slate-300 mt-0.5">
-              <strong className="text-arcade-gold">{effectiveCompletedLetters}</strong> / {winningWord.length} Letters
-            </div>
-            <span className="text-[10px] text-arcade-muted block">
-              {effectiveCompletedLines.length} line(s) done
-            </span>
-          </div>
 
-          {/* Letter Chips */}
-          <div className="flex items-center gap-1 shrink-0">
-            {winningWord.split('').map((letter, idx) => {
-              const isUnlocked = idx < effectiveCompletedLetters;
-              return (
-                <motion.div
-                  key={idx}
-                  animate={isUnlocked ? { scale: [1, 1.15, 1] } : { scale: 1 }}
-                  transition={{ duration: 0.3 }}
-                  className={`w-7 h-8 sm:w-8 sm:h-9 rounded-lg border flex items-center justify-center font-mono font-black text-xs sm:text-sm select-none transition-all ${
-                    isUnlocked
-                      ? 'bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 border-yellow-200 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.8)] scale-105'
-                      : 'bg-arcade-bg/90 border-arcade-border text-slate-500'
-                  }`}
-                >
-                  {isUnlocked ? letter : '_'}
-                </motion.div>
-              );
-            })}
+            {/* Letter Chips */}
+            <div className="flex items-center gap-1 shrink-0">
+              {winningWord.split('').map((letter, idx) => {
+                const isUnlocked = idx < effectiveCompletedLetters;
+                return (
+                  <motion.div
+                    key={idx}
+                    animate={isUnlocked ? { scale: [1, 1.15, 1] } : { scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                    className={`w-7 h-8 sm:w-8 sm:h-9 rounded-lg border flex items-center justify-center font-mono font-black text-xs sm:text-sm select-none transition-all ${
+                      isUnlocked
+                        ? 'bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 border-yellow-200 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.8)] scale-105'
+                        : 'bg-arcade-bg/90 border-arcade-border text-slate-500'
+                    }`}
+                  >
+                    {isUnlocked ? letter : '_'}
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      </Interactive3DStage>
 
       {/* 2. COMPACT RECENT CALLS STRIP */}
       <RecentCallsList lastCalledNumbers={game?.lastCalledNumbers || []} compact={true} />
@@ -1000,90 +1031,93 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
         </button>
       </div>
 
-      {/* 3. MAIN ARENA: SIDE-BY-SIDE BOARD & NUMBER SELECTOR */}
+      {/* 3. MAIN ARENA: SIDE-BY-SIDE BOARD & NUMBER SELECTOR WITH 3D MOUSE MOVEMENT */}
       <div className={`grid grid-cols-1 ${isManualMode && !isMyTurn ? 'max-w-2xl mx-auto' : 'lg:grid-cols-2'} gap-3 sm:gap-6 items-start`}>
-        {/* LEFT BOX: YOUR BOARD (N×N) */}
-        <div
-          className={`rounded-3xl bg-arcade-card/90 border-2 border-arcade-border p-3 sm:p-5 shadow-arcade-card space-y-3 flex flex-col justify-between ${
-            mobileView === 'numbers' && (!isManualMode || isMyTurn) ? 'hidden lg:flex' : 'flex'
-          }`}
-        >
-          <div className="flex items-center justify-between text-xs pb-2.5 border-b border-arcade-border/80">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span className="font-extrabold text-white uppercase tracking-wider">
-                YOUR BOARD ({gridSize}×{gridSize})
-              </span>
+        {/* LEFT BOX: YOUR BOARD (N×N) WITH 3D PERSPECTIVE */}
+        <Interactive3DStage maxTiltX={4} maxTiltY={5} depth={15} className={mobileView === 'numbers' && (!isManualMode || isMyTurn) ? 'hidden lg:block' : 'block'}>
+          <div
+            className="rounded-3xl bg-arcade-card/90 border-2 border-arcade-border p-3 sm:p-5 shadow-arcade-card space-y-3 flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-between text-xs pb-2.5 border-b border-arcade-border/80">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span className="font-extrabold text-white uppercase tracking-wider">
+                  YOUR BOARD ({gridSize}×{gridSize})
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-full bg-arcade-magenta/20 border border-arcade-magenta/40 text-fuchsia-300 text-[10px] font-black flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-amber-300" />
+                  <span>{effectiveCompletedLines.length} Lines Done</span>
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  isManualMode
+                    ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
+                    : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                }`}>
+                  {isManualMode ? 'MANUAL MARKING' : 'AUTO-EVALUATED'}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded-full bg-arcade-magenta/20 border border-arcade-magenta/40 text-fuchsia-300 text-[10px] font-black flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-amber-300" />
-                <span>{effectiveCompletedLines.length} Lines Done</span>
-              </span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                isManualMode
-                  ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
-                  : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
-              }`}>
-                {isManualMode ? 'MANUAL MARKING' : 'AUTO-EVALUATED'}
-              </span>
-            </div>
+
+            {/* Render Bingo Board with Completed Line Visual Treatment */}
+            <BingoBoard
+              gridSize={gridSize}
+              cells={playerBoard}
+              onCellClick={handleBoardCellClick}
+              nextNumber={null}
+              isLocked={true}
+              calledNumbers={calledNumbers}
+              markedNumbers={isManualMode ? manuallyMarked : calledNumbers}
+              manualMarking={isManualMode}
+              completedLines={effectiveCompletedLines}
+            />
+
+            <p className="text-[11px] text-center text-arcade-muted pt-1">
+              {isManualMode
+                ? 'Tap any called number on your board to cross it off. Lines form as you mark them!'
+                : 'Completed lines glow brightly with amber aura. Each finished line unlocks the next letter.'}
+            </p>
           </div>
+        </Interactive3DStage>
 
-          {/* Render Bingo Board with Completed Line Visual Treatment */}
-          <BingoBoard
-            gridSize={gridSize}
-            cells={playerBoard}
-            onCellClick={handleBoardCellClick}
-            nextNumber={null}
-            isLocked={true}
-            calledNumbers={calledNumbers}
-            markedNumbers={isManualMode ? manuallyMarked : calledNumbers}
-            manualMarking={isManualMode}
-            completedLines={effectiveCompletedLines}
-          />
-
-          <p className="text-[11px] text-center text-arcade-muted pt-1">
-            {isManualMode
-              ? 'Tap any called number on your board to cross it off. Lines form as you mark them!'
-              : 'Completed lines glow brightly with amber aura. Each finished line unlocks the next letter.'}
-          </p>
-        </div>
-
-        {/* RIGHT BOX: NUMBER SELECTOR (N² NUMBERS) */}
+        {/* RIGHT BOX: NUMBER SELECTOR (N² NUMBERS) WITH 3D PERSPECTIVE */}
         {/* If in manual mode, the number selector is only visible when it is this player's turn to call */}
         {(!isManualMode || isMyTurn) && (
-          <div className={`h-full ${mobileView === 'board' ? 'hidden lg:block' : 'block'}`}>
-            {/* Quick Return to Board link on mobile when in numbers view */}
-            {mobileView === 'numbers' && (
-              <div className="lg:hidden flex justify-end pb-1.5">
-                <button
-                  type="button"
-                  onClick={() => setMobileView('board')}
-                  className="text-xs font-bold text-arcade-gold flex items-center gap-1 hover:underline"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Switch to My Board</span>
-                </button>
-              </div>
-            )}
+          <Interactive3DStage maxTiltX={4} maxTiltY={5} depth={15} className={`h-full ${mobileView === 'board' ? 'hidden lg:block' : 'block'}`}>
+            <div className="h-full">
+              {/* Quick Return to Board link on mobile when in numbers view */}
+              {mobileView === 'numbers' && (
+                <div className="lg:hidden flex justify-end pb-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setMobileView('board')}
+                    className="text-xs font-bold text-arcade-gold flex items-center gap-1 hover:underline"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Switch to My Board</span>
+                  </button>
+                </div>
+              )}
 
-            <NumberCallerGrid
-              gridSize={gridSize}
-              calledNumbers={calledNumbers}
-              isMyTurn={isMyTurn && !game?.finishedPlayerIds?.includes(currentPlayer.id)}
-              currentCallerName={currentTurnPlayer?.name || 'Active Player'}
-              isProcessing={isCallingNumber}
-              processingNumber={callingNumberVal}
-              onCallNumber={handleCallNumber}
-              isGameOver={isGameOver}
-              gameOverMessage={
-                isWon
-                  ? `🏆 Match concluded! Winner: ${game.winnerName}`
-                  : 'Match finished. All numbers called.'
-              }
-            />
-          </div>
+              <NumberCallerGrid
+                gridSize={gridSize}
+                calledNumbers={calledNumbers}
+                lockedNumbers={locallyLockedNumbers}
+                isMyTurn={isMyTurn && !game?.finishedPlayerIds?.includes(currentPlayer.id)}
+                currentCallerName={currentTurnPlayer?.name || 'Active Player'}
+                isProcessing={isCallingNumber}
+                processingNumber={callingNumberVal}
+                onCallNumber={handleCallNumber}
+                isGameOver={isGameOver}
+                gameOverMessage={
+                  isWon
+                    ? `🏆 Match concluded! Winner: ${game.winnerName}`
+                    : 'Match finished. All numbers called.'
+                }
+              />
+            </div>
+          </Interactive3DStage>
         )}
       </div>
 

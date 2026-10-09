@@ -24,7 +24,7 @@ export function GameRoomPage() {
   useEffect(() => {
     async function loadRoom() {
       setLoading(true);
-      const session = getPlayerSession();
+      const session = getPlayerSession(paramCode);
       const targetCode = paramCode || session?.roomCode;
 
       if (!targetCode) {
@@ -50,12 +50,16 @@ export function GameRoomPage() {
           setCurrentRoom(res.data);
           const matchedPlayer = session?.playerId
             ? res.data.players.find((p) => p.id === session.playerId)
-            : res.data.players.find((p) => p.name.toLowerCase() === session?.playerName?.toLowerCase()) ||
-              res.data.players[0];
+            : session?.playerName
+            ? res.data.players.find((p) => p.name.toLowerCase() === session.playerName.toLowerCase())
+            : undefined;
+
           if (matchedPlayer) {
             setCurrentPlayer(matchedPlayer);
-          } else if (res.data.players.length > 0) {
-            setCurrentPlayer(res.data.players[0]);
+          } else {
+            // Player is not in this room yet; send to Join with this room code prefilled
+            navigate(`/join?code=${targetCode}`, { replace: true });
+            return;
           }
         }
       } catch {
@@ -147,7 +151,10 @@ export function GameRoomPage() {
         me &&
         (me.hasSubmitted !== currentPlayer.hasSubmitted ||
           me.isHost !== currentPlayer.isHost ||
-          me.isConnected !== currentPlayer.isConnected)
+          me.isConnected !== currentPlayer.isConnected ||
+          (me.completedLines?.length || 0) !== (currentPlayer.completedLines?.length || 0) ||
+          (me.earnedLetters?.length || 0) !== (currentPlayer.earnedLetters?.length || 0) ||
+          me.board !== currentPlayer.board)
       ) {
         setCurrentPlayer(me);
       }

@@ -24,6 +24,18 @@ export interface PlayerSession {
 export function savePlayerSession(session: PlayerSession): void {
   try {
     const code = session.roomCode.trim().toUpperCase();
+    const payload = JSON.stringify({
+      roomCode: code,
+      playerId: session.playerId.trim(),
+      playerName: session.playerName.trim(),
+      isHost: Boolean(session.isHost),
+    });
+
+    // Store room-specific session key
+    sessionStorage.setItem(`bingo_room_session_${code}`, payload);
+    localStorage.setItem(`bingo_room_session_${code}`, payload);
+
+    // Keep global last session for quick restore
     sessionStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
     sessionStorage.setItem(STORAGE_KEYS.PLAYER_ID, session.playerId);
     sessionStorage.setItem(STORAGE_KEYS.PLAYER_NAME, session.playerName);
@@ -40,9 +52,29 @@ export function savePlayerSession(session: PlayerSession): void {
 
 /**
  * Retrieve current player session from sessionStorage or localStorage.
+ * If targetRoomCode is passed, specifically retrieves the session matching that room.
  */
-export function getPlayerSession(): PlayerSession | null {
+export function getPlayerSession(targetRoomCode?: string): PlayerSession | null {
   try {
+    if (targetRoomCode) {
+      const code = targetRoomCode.trim().toUpperCase();
+      const rawRoomSession =
+        sessionStorage.getItem(`bingo_room_session_${code}`) ||
+        localStorage.getItem(`bingo_room_session_${code}`);
+
+      if (rawRoomSession) {
+        const parsed = JSON.parse(rawRoomSession);
+        if (parsed.playerId && parsed.playerName) {
+          return {
+            roomCode: code,
+            playerId: parsed.playerId,
+            playerName: parsed.playerName,
+            isHost: Boolean(parsed.isHost),
+          };
+        }
+      }
+    }
+
     const roomCode =
       sessionStorage.getItem(STORAGE_KEYS.ROOM_CODE) ||
       localStorage.getItem(STORAGE_KEYS.ROOM_CODE);
@@ -58,8 +90,13 @@ export function getPlayerSession(): PlayerSession | null {
     const isHost = isHostVal === 'true';
 
     if (roomCode && playerId && playerName) {
+      const cleanCode = roomCode.trim().toUpperCase();
+      // If a specific target room is requested, only return if room codes match
+      if (targetRoomCode && cleanCode !== targetRoomCode.trim().toUpperCase()) {
+        return null;
+      }
       return {
-        roomCode: roomCode.trim().toUpperCase(),
+        roomCode: cleanCode,
         playerId: playerId.trim(),
         playerName: playerName.trim(),
         isHost,
@@ -74,8 +111,14 @@ export function getPlayerSession(): PlayerSession | null {
 /**
  * Clear stored player session on intentional departure or match close.
  */
-export function clearPlayerSession(): void {
+export function clearPlayerSession(targetRoomCode?: string): void {
   try {
+    if (targetRoomCode) {
+      const code = targetRoomCode.trim().toUpperCase();
+      sessionStorage.removeItem(`bingo_room_session_${code}`);
+      localStorage.removeItem(`bingo_room_session_${code}`);
+    }
+
     sessionStorage.removeItem(STORAGE_KEYS.ROOM_CODE);
     sessionStorage.removeItem(STORAGE_KEYS.PLAYER_ID);
     sessionStorage.removeItem(STORAGE_KEYS.PLAYER_NAME);

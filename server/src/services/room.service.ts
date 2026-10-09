@@ -1141,7 +1141,7 @@ export const roomService = {
     }
 
     // 5. Current player turn check
-    if (room.game.currentPlayerId !== cleanPlayerId) {
+    if (String(room.game.currentPlayerId || '').trim() !== cleanPlayerId) {
       return {
         success: false,
         statusCode: 403,
@@ -1232,7 +1232,7 @@ export const roomService = {
       if (freshRoom.game.calledNumbers.includes(num)) {
         return { success: false, statusCode: 400, message: 'That number has already been called.' };
       }
-      if (freshRoom.game.currentPlayerId !== cleanPlayerId) {
+      if (String(freshRoom.game.currentPlayerId || '').trim() !== cleanPlayerId) {
         return { success: false, statusCode: 403, message: 'It is not your turn.' };
       }
       return { success: false, statusCode: 409, message: 'Concurrent call conflict. Please retry.' };
