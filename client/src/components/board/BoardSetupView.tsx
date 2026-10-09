@@ -10,10 +10,11 @@ import {
   AlertCircle,
   Clock,
   Play,
+  UserX,
 } from 'lucide-react';
 import { Room, Player } from '../../types';
 import { roomService, BackendPublicRoom, mapBackendRoomToClient } from '../../lib/roomService';
-import { getSocket, joinRoomSocket, submitBoardSocket } from '../../lib/socket';
+import { getSocket, joinRoomSocket, submitBoardSocket, kickPlayerSocket } from '../../lib/socket';
 import { Button } from '../ui/Button';
 import { TiltCard } from '../ui/TiltCard';
 import { BingoBoard } from './BingoBoard';
@@ -37,6 +38,24 @@ export function BoardSetupView({
   const totalNumbers = gridSize * gridSize;
 
   const prevRoundRef = useRef<number>(initialRoom.game?.roundNumber || 1);
+  const [kickingPlayerId, setKickingPlayerId] = useState<string | null>(null);
+
+  const handleKickPlayer = async (targetId: string, targetName: string) => {
+    if (!currentPlayer.isHost || kickingPlayerId) return;
+    if (!window.confirm(`Are you sure you want to remove ${targetName} from the room?`)) return;
+
+    setKickingPlayerId(targetId);
+    try {
+      const res = await kickPlayerSocket(room.roomCode, currentPlayer.id, targetId);
+      if (!res.success) {
+        await roomService.kickPlayer(room.roomCode, currentPlayer.id, targetId);
+      }
+    } catch {
+      // Ignored
+    } finally {
+      setKickingPlayerId(null);
+    }
+  };
 
   useEffect(() => {
     setRoom(initialRoom);
@@ -513,17 +532,31 @@ export function BoardSetupView({
                       )}
                     </div>
 
-                    {submitted ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-400 font-bold text-[11px]">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Submitted</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-arcade-muted text-[11px]">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>Preparing…</span>
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {submitted ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-400 font-bold text-[11px]">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Submitted</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-arcade-muted text-[11px]">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Preparing…</span>
+                        </span>
+                      )}
+
+                      {isHost && !p.isHost && (
+                        <button
+                          type="button"
+                          disabled={kickingPlayerId === p.id}
+                          onClick={() => handleKickPlayer(p.id, p.name)}
+                          className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition disabled:opacity-50"
+                          title={`Remove ${p.name}`}
+                        >
+                          <UserX className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

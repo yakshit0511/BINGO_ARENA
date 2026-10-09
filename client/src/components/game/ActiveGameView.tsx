@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   DoorClosed,
   Hash,
+  UserX,
 } from 'lucide-react';
 import { Room, Player, GameState } from '../../types';
 import { BingoBoard } from '../board/BingoBoard';
@@ -36,6 +37,7 @@ import {
   continueGameSocket,
   endGameSocket,
   closeRoomSocket,
+  kickPlayerSocket,
 } from '../../lib/socket';
 import { roomService, mapBackendRoomToClient, BackendPublicRoom } from '../../lib/roomService';
 import { clearPlayerSession } from '../../lib/session';
@@ -54,6 +56,9 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
   const [isCallingNumber, setIsCallingNumber] = useState(false);
   const [callingNumberVal, setCallingNumberVal] = useState<number | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
+  const [showPlayersModal, setShowPlayersModal] = useState(false);
+  const [playerToKick, setPlayerToKick] = useState<{ id: string; name: string } | null>(null);
+  const [isKickingPlayer, setIsKickingPlayer] = useState(false);
   const [isRestartingMatch, setIsRestartingMatch] = useState(false);
   const [mobileView, setMobileView] = useState<'both' | 'board' | 'numbers'>('both');
 
@@ -512,6 +517,23 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
     }
   };
 
+  // Host kicks/removes a player during active match
+  const handleKickPlayer = async (targetId: string, _targetName?: string) => {
+    if (!currentPlayer.isHost || isKickingPlayer) return;
+    setIsKickingPlayer(true);
+    try {
+      const res = await kickPlayerSocket(room.roomCode, currentPlayer.id, targetId);
+      if (!res.success) {
+        await roomService.kickPlayer(room.roomCode, currentPlayer.id, targetId);
+      }
+      setPlayerToKick(null);
+    } catch {
+      // Ignored
+    } finally {
+      setIsKickingPlayer(false);
+    }
+  };
+
   // Host restarts match
   const handleRestartMatch = async () => {
     if (!currentPlayer.isHost || isRestartingMatch) return;
@@ -747,11 +769,19 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
             </span>
           )}
 
-          {/* Players in Match */}
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-arcade-surface border border-arcade-border text-xs font-bold text-arcade-gold">
+          {/* Players in Match - Clickable to open roster & player management */}
+          <button
+            type="button"
+            onClick={() => setShowPlayersModal(true)}
+            title={currentPlayer.isHost ? 'Manage match players' : 'View match players'}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-arcade-surface hover:bg-arcade-card border border-arcade-border hover:border-arcade-purple/70 text-xs font-bold text-arcade-gold cursor-pointer transition shadow-sm active:scale-95"
+          >
             <Users className="w-3.5 h-3.5" />
             <span>{room.players.length} Players</span>
-          </span>
+            {currentPlayer.isHost && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse ml-0.5" />
+            )}
+          </button>
 
           {/* Sound Toggle */}
           <button
@@ -852,7 +882,7 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
           {/* CURRENT TURN CARD (Compact) */}
           <motion.div
             layout
-            className={`md:col-span-4 rounded-2xl p-3 sm:p-3.5 border transition-all flex items-center justify-between gap-3 overflow-hidden ${
+            className={`md:col-span-3 rounded-2xl p-3 sm:p-3.5 border transition-all flex items-center justify-between gap-3 overflow-hidden ${
               isGameOver
                 ? 'bg-arcade-card/90 border-arcade-border'
                 : isMyTurn
@@ -905,7 +935,7 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
           </motion.div>
 
           {/* COMPACT CURRENT NUMBER BOX */}
-          <div className="md:col-span-4">
+          <div className="md:col-span-3 lg:col-span-4">
             <CurrentNumberBall
               currentNumber={currentNumber}
               callerName={currentCallerName}
@@ -915,31 +945,38 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
             />
           </div>
 
-          {/* WINNING PROGRESS TARGET (B I N G O) */}
-          <div className="md:col-span-4 rounded-2xl bg-arcade-card/80 border border-arcade-border/80 p-2.5 sm:p-3 flex items-center justify-between gap-3 shadow-sm">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-arcade-gold">
+          {/* WINNING PROGRESS TARGET (B I N G O) - Responsive auto-scaling */}
+          <div className="md:col-span-6 lg:col-span-5 rounded-2xl bg-arcade-card/80 border border-arcade-border/80 p-2.5 sm:p-3 flex items-center justify-between gap-3 shadow-sm min-w-0">
+            <div className="shrink-0 min-w-max pr-1 sm:pr-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-arcade-gold whitespace-nowrap">
                 <Trophy className="w-3 h-3 text-arcade-gold shrink-0" />
                 <span>TARGET ({winningWord})</span>
               </div>
-              <div className="text-[11px] font-mono font-bold text-slate-300 mt-0.5">
+              <div className="text-[11px] font-mono font-bold text-slate-300 mt-0.5 whitespace-nowrap">
                 <strong className="text-arcade-gold">{effectiveCompletedLetters}</strong> / {winningWord.length} Letters
               </div>
-              <span className="text-[10px] text-arcade-muted block">
+              <span className="text-[10px] text-arcade-muted block whitespace-nowrap">
                 {effectiveCompletedLines.length} line(s) done
               </span>
             </div>
 
             {/* Letter Chips */}
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end max-w-full overflow-hidden">
               {winningWord.split('').map((letter, idx) => {
                 const isUnlocked = idx < effectiveCompletedLetters;
+                const chipDim =
+                  winningWord.length > 8
+                    ? 'w-5 h-6 sm:w-6 sm:h-7 text-[10px] sm:text-xs'
+                    : winningWord.length > 5
+                    ? 'w-6 h-7 sm:w-7 sm:h-8 text-[11px] sm:text-xs'
+                    : 'w-7 h-8 sm:w-8 sm:h-9 text-xs sm:text-sm';
+
                 return (
                   <motion.div
                     key={idx}
                     animate={isUnlocked ? { scale: [1, 1.15, 1] } : { scale: 1 }}
                     transition={{ duration: 0.3 }}
-                    className={`w-7 h-8 sm:w-8 sm:h-9 rounded-lg border flex items-center justify-center font-mono font-black text-xs sm:text-sm select-none transition-all ${
+                    className={`${chipDim} rounded-lg border flex items-center justify-center font-mono font-black select-none transition-all ${
                       isUnlocked
                         ? 'bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 border-yellow-200 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.8)] scale-105'
                         : 'bg-arcade-bg/90 border-arcade-border text-slate-500'
@@ -1137,6 +1174,146 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
             </button>
           </div>
         )}
+      {/* MATCH ROSTER & PLAYER MANAGEMENT MODAL */}
+      <AnimatePresence>
+        {showPlayersModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="w-full max-w-lg rounded-3xl bg-arcade-card border-2 border-arcade-border p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-arcade-border">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-arcade-gold" />
+                  <h3 className="text-base font-black text-white uppercase tracking-wider">
+                    Match Roster ({room.players.length} Players)
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPlayersModal(false)}
+                  className="p-1 rounded-lg hover:bg-arcade-surface text-slate-400 hover:text-white transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                {room.players.map((p, idx) => {
+                  const isYou = p.id === currentPlayer.id;
+                  const isCurrentTurn = game?.currentPlayerId === p.id;
+                  const lines = p.completedLines?.length || p.completedLineCount || 0;
+                  const letters = p.earnedLetters?.length || 0;
+
+                  return (
+                    <div
+                      key={p.id}
+                      className={`flex items-center justify-between p-3 rounded-2xl border text-xs transition ${
+                        isCurrentTurn
+                          ? 'bg-arcade-magenta/15 border-arcade-magenta/50'
+                          : 'bg-arcade-surface/60 border-arcade-border'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <div
+                          className="w-8 h-8 rounded-xl flex items-center justify-center font-mono font-bold text-white shrink-0 text-xs shadow-sm"
+                          style={{ backgroundColor: p.avatarColor || '#7C3AED' }}
+                        >
+                          {p.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-extrabold text-white truncate max-w-[140px]">
+                              {p.name}
+                            </span>
+                            {isYou && (
+                              <span className="px-1.5 py-0.2 rounded bg-arcade-purple/30 text-fuchsia-300 text-[9px] font-black">
+                                YOU
+                              </span>
+                            )}
+                            {p.isHost && (
+                              <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-black">
+                                👑 HOST
+                              </span>
+                            )}
+                            {isCurrentTurn && (
+                              <span className="px-1.5 py-0.2 rounded bg-arcade-magenta/30 text-fuchsia-200 text-[9px] font-black animate-pulse">
+                                TURN
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-arcade-muted block mt-0.5">
+                            Order #{idx + 1} • {lines} lines • {letters}/{winningWord.length} letters
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Host remove button */}
+                        {currentPlayer.isHost && !p.isHost && (
+                          <button
+                            type="button"
+                            onClick={() => setPlayerToKick({ id: p.id, name: p.name })}
+                            className="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 hover:text-white font-bold text-[11px] flex items-center gap-1 transition"
+                            title={`Remove ${p.name} from match`}
+                          >
+                            <UserX className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Confirmation prompt inside modal */}
+              {playerToKick && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/40 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-rose-300">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>Remove {playerToKick.name} from this active match?</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    The player will be immediately removed and turns will automatically adjust for remaining players.
+                  </p>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={isKickingPlayer}
+                      onClick={() => setPlayerToKick(null)}
+                      className="px-3 py-1.5 rounded-xl bg-arcade-surface hover:bg-arcade-card text-xs text-slate-300 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isKickingPlayer}
+                      onClick={() => handleKickPlayer(playerToKick.id, playerToKick.name)}
+                      className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs transition flex items-center gap-1 shadow-lg"
+                    >
+                      <UserX className="w-3.5 h-3.5" />
+                      <span>{isKickingPlayer ? 'Removing...' : 'Confirm Remove'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowPlayersModal(false)}
+                  className="px-4 py-2 rounded-xl bg-arcade-surface hover:bg-arcade-card text-xs font-bold text-white transition"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

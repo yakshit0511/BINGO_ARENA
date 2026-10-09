@@ -195,6 +195,9 @@ export async function kickPlayerHandler(req: Request, res: Response): Promise<vo
             message: 'You have been removed from the room by the host.',
           });
           io.to(`room:${roomCode}`).emit('room:state', result.data.room);
+          if (result.data.room.game) {
+            io.to(`room:${roomCode}`).emit('game:state', result.data.room.game);
+          }
         }
       } catch (err) {
         console.warn('Socket broadcast warning in kickPlayerHandler:', err);

@@ -236,6 +236,9 @@ export function registerRoomSocketHandlers(io: Server, socket: Socket): void {
         });
         // Broadcast updated room state
         io.to(socketRoomName).emit('room:state', result.data.room);
+        if (result.data.room.game) {
+          io.to(socketRoomName).emit('game:state', result.data.room.game);
+        }
 
         if (typeof callback === 'function') {
           callback({

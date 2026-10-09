@@ -70,7 +70,9 @@ const PlayerSchema = new Schema<IPlayerDocument>(
   }
 );
 
-// Compound index to facilitate searching active room participants
+// Compound indexes to facilitate fast querying of active room participants
 PlayerSchema.index({ roomCode: 1, name: 1 });
+PlayerSchema.index({ roomCode: 1, playerId: 1 });
+PlayerSchema.index({ roomCode: 1, isConnected: 1 });
 
 export const PlayerModel = model<IPlayerDocument>('Player', PlayerSchema);

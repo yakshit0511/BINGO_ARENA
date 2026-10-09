@@ -219,6 +219,28 @@ export function formatPublicRoom(
   };
 }
 
+// High-performance in-memory room cache to eliminate database pressure under concurrent players
+const activeRoomCache = new Map<string, { room: PublicRoom; cachedAt: number }>();
+const CACHE_TTL_MS = 2500; // 2.5 seconds TTL for reads, invalidated immediately on any write
+
+export function setCachedRoom(roomCode: string, room: PublicRoom): void {
+  activeRoomCache.set(roomCode.trim().toUpperCase(), { room, cachedAt: Date.now() });
+}
+
+export function getCachedRoom(roomCode: string): PublicRoom | null {
+  const item = activeRoomCache.get(roomCode.trim().toUpperCase());
+  if (!item) return null;
+  if (Date.now() - item.cachedAt > CACHE_TTL_MS) {
+    activeRoomCache.delete(roomCode.trim().toUpperCase());
+    return null;
+  }
+  return item.room;
+}
+
+export function invalidateRoomCache(roomCode: string): void {
+  activeRoomCache.delete(roomCode.trim().toUpperCase());
+}
+
 export const roomService = {
   /**
    * Create a new room with host player in MongoDB.
@@ -403,6 +425,17 @@ export const roomService = {
   async getRoom(roomCode: string): Promise<ServiceResult<PublicRoom>> {
     const cleanCode = roomCode.trim().toUpperCase();
 
+    // 1. Instant in-memory cache hit
+    const cached = getCachedRoom(cleanCode);
+    if (cached) {
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Room details retrieved',
+        data: cached,
+      };
+    }
+
     const room = await RoomModel.findOne({ roomCode: cleanCode });
     if (!room) {
       return {
@@ -419,6 +452,7 @@ export const roomService = {
 
     const hostPlayer = players.find((p) => p.playerId === room.hostPlayerId) || null;
     const publicRoom = formatPublicRoom(room, players, hostPlayer);
+    setCachedRoom(cleanCode, publicRoom);
 
     return {
       success: true,
@@ -577,7 +611,39 @@ export const roomService = {
       playerId: { $in: room.players },
     }).sort({ joinedAt: 1 });
 
-    // Re-evaluate if all submitted
+    // Update active match state if game is running or ready
+    if (room.game && (room.game.status === 'active' || room.game.status === 'ready')) {
+      if (Array.isArray(room.game.gamePlayers)) {
+        room.game.gamePlayers = room.game.gamePlayers.filter((id) => id !== targetPlayerId);
+      }
+      if (Array.isArray(room.game.playerOrder)) {
+        room.game.playerOrder = room.game.playerOrder.filter((id) => id !== targetPlayerId);
+      }
+      if (Array.isArray(room.game.finishedPlayerIds)) {
+        room.game.finishedPlayerIds = room.game.finishedPlayerIds.filter((id) => id !== targetPlayerId);
+      }
+
+      // If it was the kicked player's turn, advance turn immediately to next active player
+      if (room.game.currentPlayerId === targetPlayerId && room.game.playerOrder.length > 0) {
+        const nextIdx = (room.game.currentTurnIndex || 0) % room.game.playerOrder.length;
+        room.game.currentTurnIndex = nextIdx;
+        room.game.currentPlayerId = room.game.playerOrder[nextIdx];
+        const nextPlayerDoc = remainingPlayers.find((p) => p.playerId === room.game.currentPlayerId);
+        room.game.currentCallerName = nextPlayerDoc ? nextPlayerDoc.name : 'Active Player';
+      }
+
+      // If only 1 player remains in an active game, declare them the winner!
+      if (room.game.status === 'active' && room.game.playerOrder.length <= 1) {
+        const soleWinner = remainingPlayers.find((p) => p.playerId === room.game.playerOrder[0]);
+        room.game.status = 'won';
+        room.game.winnerId = room.game.playerOrder[0] || null;
+        room.game.winnerName = soleWinner ? soleWinner.name : 'Sole Contender';
+        room.game.wonAt = new Date();
+        room.status = 'finished';
+      }
+    }
+
+    // Re-evaluate if all submitted for pre-game waiting rooms
     const allSubmitted = remainingPlayers.length > 0 && remainingPlayers.every((p) => p.hasSubmitted);
     if (allSubmitted && room.status === 'waiting') {
       room.status = 'ready';
@@ -588,6 +654,7 @@ export const roomService = {
 
     const hostPlayer = remainingPlayers.find((p) => p.playerId === room.hostPlayerId) || null;
     const publicRoom = formatPublicRoom(room, remainingPlayers, hostPlayer);
+    setCachedRoom(cleanCode, publicRoom);
 
     return {
       success: true,
