@@ -144,7 +144,7 @@ export function NumberCallerGrid({
                       : isThisProcessing
                       ? 'bg-amber-500/30 border-2 border-amber-400 text-amber-200 animate-pulse cursor-wait'
                       : isMyTurn
-                      ? 'bg-gradient-to-br from-arcade-purple/90 to-fuchsia-950 border-2 border-arcade-magenta/70 text-white hover:border-arcade-gold hover:shadow-neon-magenta hover:scale-105 active:scale-95 cursor-pointer shadow-[0_2px_6px_rgba(0,0,0,0.6)]'
+                      ? 'bg-gradient-to-br from-arcade-purple/90 to-fuchsia-950 border-2 border-arcade-magenta/70 text-white hover:border-arcade-gold hover:brightness-125 hover:shadow-[0_0_14px_rgba(217,70,239,0.55)] active:scale-95 cursor-pointer shadow-[0_2px_6px_rgba(0,0,0,0.6)]'
                       : 'bg-arcade-surface/70 border border-arcade-border text-slate-400 cursor-not-allowed opacity-75'
                   }
                 `}

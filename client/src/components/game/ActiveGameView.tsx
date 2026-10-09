@@ -847,7 +847,7 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
     </AnimatePresence>
 
       {/* 1. COMPACT COMMAND HUD (Turn Status, Compact Current Number Box, Winning Target) WITH 3D PERSPECTIVE */}
-      <Interactive3DStage maxTiltX={2.5} maxTiltY={4} depth={12}>
+      <Interactive3DStage maxTiltX={1.5} maxTiltY={2} depth={0}>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch">
           {/* CURRENT TURN CARD (Compact) */}
           <motion.div
@@ -1034,7 +1034,7 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
       {/* 3. MAIN ARENA: SIDE-BY-SIDE BOARD & NUMBER SELECTOR WITH 3D MOUSE MOVEMENT */}
       <div className={`grid grid-cols-1 ${isManualMode && !isMyTurn ? 'max-w-2xl mx-auto' : 'lg:grid-cols-2'} gap-3 sm:gap-6 items-start`}>
         {/* LEFT BOX: YOUR BOARD (N×N) WITH 3D PERSPECTIVE */}
-        <Interactive3DStage maxTiltX={4} maxTiltY={5} depth={15} className={mobileView === 'numbers' && (!isManualMode || isMyTurn) ? 'hidden lg:block' : 'block'}>
+        <Interactive3DStage disableTilt={true} glowEffect={true} className={mobileView === 'numbers' && (!isManualMode || isMyTurn) ? 'hidden lg:block' : 'block'}>
           <div
             className="rounded-3xl bg-arcade-card/90 border-2 border-arcade-border p-3 sm:p-5 shadow-arcade-card space-y-3 flex flex-col justify-between"
           >
@@ -1084,7 +1084,7 @@ export function ActiveGameView({ room: initialRoom, currentPlayer, onExit, onRoo
         {/* RIGHT BOX: NUMBER SELECTOR (N² NUMBERS) WITH 3D PERSPECTIVE */}
         {/* If in manual mode, the number selector is only visible when it is this player's turn to call */}
         {(!isManualMode || isMyTurn) && (
-          <Interactive3DStage maxTiltX={4} maxTiltY={5} depth={15} className={`h-full ${mobileView === 'board' ? 'hidden lg:block' : 'block'}`}>
+          <Interactive3DStage disableTilt={true} glowEffect={true} className={`h-full ${mobileView === 'board' ? 'hidden lg:block' : 'block'}`}>
             <div className="h-full">
               {/* Quick Return to Board link on mobile when in numbers view */}
               {mobileView === 'numbers' && (

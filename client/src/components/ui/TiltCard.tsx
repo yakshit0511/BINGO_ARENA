@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 
 export interface TiltCardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
@@ -6,53 +6,57 @@ export interface TiltCardProps extends React.HTMLAttributes<HTMLDivElement> {
   elevated?: boolean;
   glowColor?: 'purple' | 'magenta' | 'gold' | 'none';
   className?: string;
+  disableTilt?: boolean;
 }
 
 export function TiltCard({
   children,
-  tiltMaxAngle = 7,
+  tiltMaxAngle = 3,
   elevated = false,
   glowColor = 'none',
   className = '',
+  disableTilt = false,
   ...props
 }: TiltCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const [transformStyle, setTransformStyle] = useState<string>('');
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const rafId = useRef<number | null>(null);
+  const isTouchRef = useRef(false);
 
   useEffect(() => {
-    // Detect touch / coarse pointer devices to safely disable tilt tracking
-    const checkTouch = () => {
-      setIsTouchDevice(
-        'ontouchstart' in window ||
-        navigator.maxTouchPoints > 0 ||
-        window.matchMedia('(pointer: coarse)').matches
-      );
-    };
-    checkTouch();
+    isTouchRef.current =
+      'ontouchstart' in window ||
+      navigator.maxTouchPoints > 0 ||
+      window.matchMedia('(pointer: coarse)').matches;
   }, []);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isTouchDevice || !cardRef.current) return;
+    if (isTouchRef.current || disableTilt || !cardRef.current) return;
 
     const rect = cardRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
+    if (rafId.current) cancelAnimationFrame(rafId.current);
 
-    const rotateX = ((y - centerY) / centerY) * -tiltMaxAngle;
-    const rotateY = ((x - centerX) / centerX) * tiltMaxAngle;
+    rafId.current = requestAnimationFrame(() => {
+      if (!cardRef.current) return;
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
 
-    setTransformStyle(
-      `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) translateY(-3px)`
-    );
+      const rotateX = ((y - centerY) / centerY) * -tiltMaxAngle;
+      const rotateY = ((x - centerX) / centerX) * tiltMaxAngle;
+
+      cardRef.current.style.transform = `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg)`;
+      cardRef.current.style.transition = 'transform 0.08s ease-out';
+    });
   };
 
   const handleMouseLeave = () => {
-    if (isTouchDevice) return;
-    setTransformStyle('perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(0px)');
+    if (isTouchRef.current || disableTilt || !cardRef.current) return;
+    if (rafId.current) cancelAnimationFrame(rafId.current);
+
+    cardRef.current.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg)';
+    cardRef.current.style.transition = 'transform 0.35s ease-out';
   };
 
   // Border & Glow styling
@@ -68,12 +72,7 @@ export function TiltCard({
       ref={cardRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      style={{
-        transform: transformStyle,
-        transition: transformStyle ? 'transform 0.15s ease-out' : 'transform 0.35s ease-out',
-        willChange: 'transform',
-      }}
-      className={`relative rounded-2xl transition-all duration-300 border ${
+      className={`relative rounded-2xl border ${
         elevated ? 'glass-card-elevated' : 'glass-card'
       } ${glowStyles[glowColor]} ${className}`}
       {...props}

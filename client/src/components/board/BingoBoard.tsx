@@ -124,9 +124,9 @@ export function BingoBoard({
                     isLineComplete
                       ? 'bg-gradient-to-br from-amber-300 via-orange-500 to-fuchsia-600 border-2 border-yellow-100 text-slate-950 font-black shadow-[0_0_25px_rgba(251,191,36,0.9),0_0_15px_rgba(217,70,239,0.7)] scale-[1.06] z-20 cursor-default animate-pulse'
                       : isMarked
-                      ? `bg-gradient-to-br from-amber-400 via-arcade-gold to-yellow-500 border-2 border-yellow-200 text-slate-950 font-black shadow-[0_0_20px_rgba(251,191,36,0.65)] scale-[1.03] z-10 ${manualMarking ? 'cursor-pointer hover:scale-105' : 'cursor-default'}`
+                      ? `bg-gradient-to-br from-amber-400 via-arcade-gold to-yellow-500 border-2 border-yellow-200 text-slate-950 font-black shadow-[0_0_20px_rgba(251,191,36,0.65)] scale-[1.03] z-10 ${manualMarking ? 'cursor-pointer hover:brightness-110 active:scale-95' : 'cursor-default'}`
                       : isWaitingToCross
-                      ? 'bg-gradient-to-br from-amber-950 via-purple-950 to-arcade-surface border-2 border-amber-400 text-amber-200 font-black shadow-[0_0_20px_rgba(251,191,36,0.85)] ring-2 ring-amber-300 animate-pulse scale-[1.04] z-15 cursor-pointer hover:scale-105'
+                      ? 'bg-gradient-to-br from-amber-950 via-purple-950 to-arcade-surface border-2 border-amber-400 text-amber-200 font-black shadow-[0_0_20px_rgba(251,191,36,0.85)] ring-2 ring-amber-300 animate-pulse scale-[1.04] z-15 cursor-pointer hover:brightness-125 hover:border-amber-300 active:scale-95'
                       : isFilled
                       ? `bg-gradient-to-br from-arcade-purple via-fuchsia-900 to-slate-900 border-2 border-fuchsia-400/60 text-white shadow-[0_0_12px_rgba(217,70,239,0.3)] ${manualMarking ? 'cursor-pointer hover:border-amber-400/50' : 'cursor-default'}`
                       : isLocked
